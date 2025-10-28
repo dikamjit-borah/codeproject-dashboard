@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 // Props for Table
 interface TableProps {
@@ -29,6 +29,7 @@ interface TableCellProps {
   children: ReactNode; // Cell content
   isHeader?: boolean; // If true, renders as <th>, otherwise <td>
   className?: string; // Optional className for styling
+  colSpan?: number; // Optional colspan for td/th
 }
 
 // Table Component
@@ -56,9 +57,17 @@ const TableCell: React.FC<TableCellProps> = ({
   children,
   isHeader = false,
   className,
+  colSpan,
 }) => {
   const CellTag = isHeader ? "th" : "td";
-  return <CellTag className={` ${className}`}>{children}</CellTag>;
+  // pass colSpan attribute if provided
+  return (
+    // passing colSpan to either th or td is valid in DOM
+    // TypeScript will accept this at runtime; no suppression needed
+    <CellTag colSpan={colSpan} className={` ${className}`}>
+      {children}
+    </CellTag>
+  );
 };
 
 export { Table, TableHeader, TableBody, TableRow, TableCell };
