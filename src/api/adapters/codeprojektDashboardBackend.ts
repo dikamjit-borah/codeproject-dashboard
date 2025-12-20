@@ -13,14 +13,14 @@ export type TransactionStatus =
   | "COMPLETED"
   | "FAILED"
   | "CANCELLED";
-export type TransactionSubstatus = "SUCCESS" | "ERROR" | "TIMEOUT" | string;
+export type TransactionSubStatus = "SUCCESS" | "ERROR" | "TIMEOUT" | string;
 
 export type Transaction = {
   id: string;
   amount: number;
   currency: string;
   status: TransactionStatus;
-  substatus?: TransactionSubstatus;
+  subStatus?: TransactionSubStatus;
   createdAt: string; // ISO date
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
@@ -37,7 +37,7 @@ export type GetTransactionsParams = {
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
   status?: TransactionStatus | string;
-  substatus?: TransactionSubstatus | string;
+  subStatus?: TransactionSubStatus | string;
   page?: number;
   limit?: number;
   [key: string]: unknown;
@@ -104,9 +104,9 @@ export const getTransactions = async (
         gatewayState ??
         paymentState ??
         "UNKNOWN";
-      const substatusStr =
+      const subStatusStr =
         (t["subStatus"] as string | undefined) ??
-        (t["substatus"] as string | undefined) ??
+        (t["subStatus"] as string | undefined) ??
         paymentState ??
         undefined;
 
@@ -118,7 +118,7 @@ export const getTransactions = async (
         amount: computedAmount as number,
         currency: "INR",
         status: statusStr as TransactionStatus,
-        substatus: substatusStr as TransactionSubstatus | undefined,
+        subStatus: subStatusStr as TransactionSubStatus | undefined,
         createdAt: (t["createdAt"] as string) ?? new Date().toISOString(),
         metadata: {
           transactionId: t["transactionId"],
