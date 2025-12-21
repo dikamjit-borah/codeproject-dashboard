@@ -358,37 +358,46 @@ export default function RecentOrders() {
     };
   }, [currentPage, limit, statusFilter, subStatusFilter, startDate, endDate]);
 
-  // Initialize date pickers
+  // Initialize date pickers when filter panel is visible (inputs exist in the DOM)
   useEffect(() => {
-    if (startDateRef.current && !startDatePickerRef.current) {
-      startDatePickerRef.current = flatpickr(startDateRef.current, {
-        dateFormat: "Y-m-d",
-        onChange: (selectedDates) => {
-          if (selectedDates.length > 0) {
-            const dateStr = selectedDates[0].toISOString().split("T")[0];
-            setStartDate(dateStr);
-          } else {
-            setStartDate("");
-          }
-        },
-      });
-    }
+    if (showFilters) {
+      if (startDateRef.current && !startDatePickerRef.current) {
+        startDatePickerRef.current = flatpickr(startDateRef.current, {
+          dateFormat: "Y-m-d",
+          appendTo: document.body,
+          clickOpens: true,
+          disableMobile: true,
+          onChange: (selectedDates) => {
+            if (selectedDates.length > 0) {
+              const dateStr = selectedDates[0].toISOString().split("T")[0];
+              setStartDate(dateStr);
+            } else {
+              setStartDate("");
+            }
+          },
+        });
+      }
 
-    if (endDateRef.current && !endDatePickerRef.current) {
-      endDatePickerRef.current = flatpickr(endDateRef.current, {
-        dateFormat: "Y-m-d",
-        onChange: (selectedDates) => {
-          if (selectedDates.length > 0) {
-            const dateStr = selectedDates[0].toISOString().split("T")[0];
-            setEndDate(dateStr);
-          } else {
-            setEndDate("");
-          }
-        },
-      });
+      if (endDateRef.current && !endDatePickerRef.current) {
+        endDatePickerRef.current = flatpickr(endDateRef.current, {
+          dateFormat: "Y-m-d",
+          appendTo: document.body,
+          clickOpens: true,
+          disableMobile: true,
+          onChange: (selectedDates) => {
+            if (selectedDates.length > 0) {
+              const dateStr = selectedDates[0].toISOString().split("T")[0];
+              setEndDate(dateStr);
+            } else {
+              setEndDate("");
+            }
+          },
+        });
+      }
     }
 
     return () => {
+      // Always destroy on cleanup to avoid stale instances across toggles
       if (startDatePickerRef.current) {
         startDatePickerRef.current.destroy();
         startDatePickerRef.current = null;
@@ -398,7 +407,7 @@ export default function RecentOrders() {
         endDatePickerRef.current = null;
       }
     };
-  }, []);
+  }, [showFilters]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -601,7 +610,7 @@ export default function RecentOrders() {
       )}
 
       <div className="max-w-full overflow-x-auto">
-        <Table className="w-full" style={{ width: table.getTotalSize() }}>
+        <Table className="w-full table-fixed">
           <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -611,7 +620,7 @@ export default function RecentOrders() {
                     <TableCell
                       key={header.id}
                       isHeader
-                      className={`py-3 font-medium text-gray-500 text-center text-theme-xs dark:text-gray-400 whitespace-nowrap relative ${
+                      className={`py-3 font-medium text-gray-500 text-center text-theme-xs dark:text-gray-400 whitespace-nowrap relative truncate overflow-hidden text-ellipsis ${
                         !isLastColumn ? "border-r border-gray-200 dark:border-gray-700" : ""
                       }`}
                       style={{
@@ -666,7 +675,7 @@ export default function RecentOrders() {
                   return (
                     <TableCell
                       key={cell.id}
-                      className={`py-3 text-gray-500 text-theme-sm dark:text-gray-400 text-center relative ${
+                      className={`py-3 text-gray-500 text-theme-sm dark:text-gray-400 text-center relative truncate overflow-hidden text-ellipsis whitespace-nowrap ${
                         !isLastColumn ? "border-r border-gray-200 dark:border-gray-700" : ""
                       }`}
                       style={{
