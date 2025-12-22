@@ -117,10 +117,18 @@ export default function RecentOrders() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(10);
+  // Temporary filter states (user input)
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [subStatusFilter, setSubStatusFilter] = useState<string>("");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  // Applied filter states (used for API calls)
+  const [appliedStatusFilter, setAppliedStatusFilter] = useState<string>("");
+  const [appliedSubStatusFilter, setAppliedSubStatusFilter] = useState<string>("");
+  const [appliedStartDate, setAppliedStartDate] = useState<string>("");
+  const [appliedEndDate, setAppliedEndDate] = useState<string>("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
   
   const startDateRef = useRef<HTMLInputElement>(null);
@@ -232,25 +240,30 @@ export default function RecentOrders() {
           subStatus?: string;
           startDate?: string;
           endDate?: string;
+          search?: string;
         } = {
           page: currentPage,
           limit,
         };
         
-        if (statusFilter) {
-          params.status = statusFilter;
+        if (appliedStatusFilter) {
+          params.status = appliedStatusFilter;
         }
         
-        if (subStatusFilter) {
-          params.subStatus = subStatusFilter;
+        if (appliedSubStatusFilter) {
+          params.subStatus = appliedSubStatusFilter;
         }
         
-        if (startDate) {
-          params.startDate = startDate;
+        if (appliedStartDate) {
+          params.startDate = appliedStartDate;
         }
         
-        if (endDate) {
-          params.endDate = endDate;
+        if (appliedEndDate) {
+          params.endDate = appliedEndDate;
+        }
+        
+        if (appliedSearchTerm) {
+          params.search = appliedSearchTerm;
         }
         
         const res = await codeprojektBackend.getTransactions(params);
@@ -356,7 +369,7 @@ export default function RecentOrders() {
     return () => {
       mounted = false;
     };
-  }, [currentPage, limit, statusFilter, subStatusFilter, startDate, endDate]);
+  }, [currentPage, limit, appliedStatusFilter, appliedSubStatusFilter, appliedStartDate, appliedEndDate, appliedSearchTerm]);
 
   // Initialize date pickers when filter panel is visible (inputs exist in the DOM)
   useEffect(() => {
@@ -409,10 +422,10 @@ export default function RecentOrders() {
     };
   }, [showFilters]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when applied filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, subStatusFilter, startDate, endDate]);
+  }, [appliedStatusFilter, appliedSubStatusFilter, appliedStartDate, appliedEndDate, appliedSearchTerm]);
 
   const handleFilterChange = (type: "status" | "subStatus", value: string) => {
     if (type === "status") {
@@ -422,11 +435,27 @@ export default function RecentOrders() {
     }
   };
 
+  const applyFilters = () => {
+    setAppliedStatusFilter(statusFilter);
+    setAppliedSubStatusFilter(subStatusFilter);
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+    setAppliedSearchTerm(searchTerm);
+  };
+
   const clearFilters = () => {
+    // Clear temporary filters
     setStatusFilter("");
     setSubStatusFilter("");
     setStartDate("");
     setEndDate("");
+    setSearchTerm("");
+    // Clear applied filters
+    setAppliedStatusFilter("");
+    setAppliedSubStatusFilter("");
+    setAppliedStartDate("");
+    setAppliedEndDate("");
+    setAppliedSearchTerm("");
     if (startDatePickerRef.current) {
       startDatePickerRef.current.clear();
     }
@@ -436,7 +465,7 @@ export default function RecentOrders() {
     setShowFilters(false);
   };
 
-  const hasActiveFilters = statusFilter || subStatusFilter || startDate || endDate;
+  const hasActiveFilters = appliedStatusFilter || appliedSubStatusFilter || appliedStartDate || appliedEndDate || appliedSearchTerm;
 
   const table = useReactTable({
     data: rows,
@@ -522,7 +551,7 @@ export default function RecentOrders() {
             Filter
             {hasActiveFilters && (
               <span className="ml-1 rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white">
-                {[statusFilter, subStatusFilter].filter(Boolean).length}
+                {[appliedStatusFilter, appliedSubStatusFilter, appliedSearchTerm].filter(Boolean).length}
               </span>
             )}
           </button>
@@ -533,6 +562,19 @@ export default function RecentOrders() {
       {showFilters && (
         <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Search
+              </label>
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:focus:border-blue-500"
+              />
+            </div>
+            
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Status
@@ -596,16 +638,28 @@ export default function RecentOrders() {
             </div>
           </div>
           
-          {hasActiveFilters && (
-            <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex gap-2 justify-end">
+            <button
+              onClick={() => setShowFilters(false)}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            {hasActiveFilters && (
               <button
                 onClick={clearFilters}
                 className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
               >
                 Clear Filters
               </button>
-            </div>
-          )}
+            )}
+            <button
+              onClick={applyFilters}
+              className="rounded-lg border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 dark:border-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
+            >
+              Apply Filters
+            </button>
+          </div>
         </div>
       )}
 

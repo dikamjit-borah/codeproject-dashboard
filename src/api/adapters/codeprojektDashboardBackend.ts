@@ -38,6 +38,7 @@ export type GetTransactionsParams = {
   endDate?: string; // YYYY-MM-DD
   status?: TransactionStatus | string;
   subStatus?: TransactionSubStatus | string;
+  transactionId?: string; // Search by transaction ID
   page?: number;
   limit?: number;
   [key: string]: unknown;
