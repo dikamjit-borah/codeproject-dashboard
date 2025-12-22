@@ -2,19 +2,23 @@ import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
 import Home from "./pages/Home/Home";
 import Transactions from "./pages/Transactions/Transactions";
+import Login from "./pages/Login/Login";
+import PrivateRoute from "./routes/PrivateRoute";
 
 export default function App() {
     return (
-       <>
-        <Router>
-            <Routes>
-                <Route element={<AppLayout />} >
-                    <Route index path="/" element={<Home />} />
-
-                    <Route path="/transactions" element={<Transactions />} />
-                </Route>
-            </Routes>
-        </Router>
-       </>
+        <>
+            <Router>
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route element={<PrivateRoute />}>
+                        <Route element={<AppLayout />}>
+                            <Route index path="/" element={<Home />} />
+                            <Route path="/transactions" element={<Transactions />} />
+                        </Route>
+                    </Route>
+                </Routes>
+            </Router>
+        </>
     )
 }

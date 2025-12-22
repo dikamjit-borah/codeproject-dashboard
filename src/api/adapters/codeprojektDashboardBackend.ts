@@ -2,8 +2,8 @@ import httpClient from "../httpClient";
 import { CODEPROJEKT_DASHBOARD_BACKEND_ENDPOINTS } from "../constants";
 
 // Small shapes for request/response — adjust to the real API
-export type AuthCredentials = { username: string; password: string };
-export type AuthResponse = { token: string; expiresAt?: string };
+export type AuthCredentials = { email: string; password: string };
+export type AuthResponse = { token?: string; expiresAt?: string; [key: string]: unknown };
 
 export type Item = { id: string; name: string; [key: string]: unknown };
 
@@ -145,6 +145,24 @@ export const getTransactions = async (
   }
 };
 
+export const login = async (
+  credentials: AuthCredentials
+): Promise<AuthResponse> => {
+  try {
+    const resp = await httpClient.post(
+      CODEPROJEKT_DASHBOARD_BACKEND_ENDPOINTS.LOGIN,
+      credentials
+    );
+    const data = resp?.data as Record<string, unknown> | undefined;
+    const inner = (data && typeof data === "object" && "data" in data
+      ? (data["data"] as Record<string, unknown>)
+      : data) as Record<string, unknown> | undefined;
+    return (inner ?? {}) as AuthResponse;
+  } catch (err: unknown) {
+    throw formatHttpError(err);
+  }
+};
+
 // Helper to normalize errors for consumers
 const formatHttpError = (error: unknown) => {
   const errObj = error as Record<string, unknown> & {
@@ -162,4 +180,5 @@ const formatHttpError = (error: unknown) => {
 
 export default {
   getTransactions,
+  login,
 };
