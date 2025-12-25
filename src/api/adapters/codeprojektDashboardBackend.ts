@@ -44,6 +44,36 @@ export type GetTransactionsParams = {
   [key: string]: unknown;
 };
 
+// Monthly Analytics API types
+export type MonthlyFinancials = {
+  _id: string;
+  totalSellPriceInINR: number;
+  totalCostPriceInSmileCoins: number;
+  totalSales: number;
+  totalCostPriceInBRR: number;
+  totalCostPriceInINR: number;
+};
+
+export type MonthlyUserAnalytics = {
+  _id: string;
+  totalUsers: number;
+};
+
+export type MonthlyAnalyticsData = {
+  month: number;
+  year: number;
+  monthlyAnalytics: {
+    monthlyFinancials: MonthlyFinancials;
+    monthlyUserAnalytics: MonthlyUserAnalytics;
+  };
+};
+
+export type GetMonthlyAnalyticsParams = {
+  month?: number;
+  year?: number;
+  [key: string]: unknown;
+};
+
 export const getTransactions = async (
   params: GetTransactionsParams
 ): Promise<PagedResult<Transaction>> => {
@@ -164,6 +194,49 @@ export const login = async (
   }
 };
 
+export const getMonthlyAnalytics = async (
+  params?: GetMonthlyAnalyticsParams
+): Promise<MonthlyAnalyticsData> => {
+  try {
+    const resp = await httpClient.get(
+      CODEPROJEKT_DASHBOARD_BACKEND_ENDPOINTS.MONTHLY_ANALYTICS,
+      {
+        params,
+      }
+    );
+    // The API responds with a wrapper: { requestId, timestamp, status, message, data: MonthlyAnalyticsData }
+    const wrapper = resp.data as unknown;
+    const inner = (
+      wrapper &&
+      typeof wrapper === "object" &&
+      "data" in (wrapper as Record<string, unknown>)
+        ? ((wrapper as Record<string, unknown>)["data"] as Record<
+            string,
+            unknown
+          >)
+        : {}
+    ) as Record<string, unknown>;
+
+    const month = Number(inner.month ?? new Date().getMonth() + 1);
+    const year = Number(inner.year ?? new Date().getFullYear());
+    const monthlyAnalytics = (inner.monthlyAnalytics ??
+      {}) as Record<string, unknown>;
+
+    return {
+      month,
+      year,
+      monthlyAnalytics: {
+        monthlyFinancials: (monthlyAnalytics.monthlyFinancials ??
+          {}) as MonthlyFinancials,
+        monthlyUserAnalytics: (monthlyAnalytics.monthlyUserAnalytics ??
+          {}) as MonthlyUserAnalytics,
+      },
+    } as MonthlyAnalyticsData;
+  } catch (err: unknown) {
+    throw formatHttpError(err);
+  }
+};
+
 // Helper to normalize errors for consumers
 const formatHttpError = (error: unknown) => {
   const errObj = error as Record<string, unknown> & {
@@ -182,4 +255,5 @@ const formatHttpError = (error: unknown) => {
 export default {
   getTransactions,
   login,
+  getMonthlyAnalytics,
 };
