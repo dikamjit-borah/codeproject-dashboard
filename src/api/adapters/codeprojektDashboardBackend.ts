@@ -1,5 +1,6 @@
 import httpClient from "../httpClient";
 import { CODEPROJEKT_DASHBOARD_BACKEND_ENDPOINTS } from "../constants";
+import axios from "axios";
 
 // Small shapes for request/response — adjust to the real API
 export type AuthCredentials = { email: string; password: string };
@@ -72,6 +73,14 @@ export type GetMonthlyAnalyticsParams = {
   month?: number;
   year?: number;
   [key: string]: unknown;
+};
+
+export type SmileCoinsResponse = {
+  requestId: string;
+  timestamp: string;
+  status: number;
+  message: string;
+  data: string;
 };
 
 export const getTransactions = async (
@@ -252,8 +261,20 @@ const formatHttpError = (error: unknown) => {
   return normalized;
 };
 
+export const getSmileCoins = async (): Promise<number> => {
+  try {
+    const resp = await axios.get<SmileCoinsResponse>(
+      "https://api-zg.codeprojekt.shop/v1/product/smileCoins"
+    );
+    return parseFloat(resp.data.data);
+  } catch (err: unknown) {
+    throw formatHttpError(err);
+  }
+};
+
 export default {
   getTransactions,
   login,
   getMonthlyAnalytics,
+  getSmileCoins,
 };

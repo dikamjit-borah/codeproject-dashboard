@@ -24,7 +24,17 @@ const navItems: NavItem[] = [
     icon: <GridIcon />,
     name: "Transactions",
     path: "/transactions",
-    },
+  },
+  {
+    icon: <GridIcon />,
+    name: "Smile Coins",
+    path: "/smile-coins",
+  },
+  {
+    icon: <PieChartIcon />,
+    name: "Analytics",
+    path: "/analytics",
+  },
   {
     name: "Pages",
     icon: <PageIcon />,
