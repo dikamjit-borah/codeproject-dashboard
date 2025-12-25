@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import backend from "../api/adapters/codeprojektDashboardBackend";
+import backend from "../api/adapters/backendAPI";
 
 export type AuthContextType = {
   isAuthenticated: boolean;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
+import { Smile } from "lucide-react";
 
 import {
   BoxCubeIcon,
@@ -26,7 +27,7 @@ const navItems: NavItem[] = [
     path: "/transactions",
   },
   {
-    icon: <GridIcon />,
+    icon: <Smile className="w-5 h-5" />,
     name: "Smile Coins",
     path: "/smile-coins",
   },

@@ -16,8 +16,8 @@ import {
   TableRow,
 } from "../ui/table";
 import Badge from "../ui/badge/Badge";
-import codeprojektBackend from "../../api/adapters/codeprojektDashboardBackend";
-import type { Transaction } from "../../api/adapters/codeprojektDashboardBackend";
+import codeprojektBackend from "../../api/adapters/backendAPI";
+import type { Transaction } from "../../api/adapters/backendAPI";
 
 // Transaction row shape
 type TransactionRow = {

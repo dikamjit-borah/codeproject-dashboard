@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Smile } from "lucide-react";
-import codeprojektDashboardBackend from "../../api/adapters/codeprojektDashboardBackend";
+import backendAPI from "../../api/adapters/backendAPI";
 
 export default function SmileCoins() {
   const [smileCoins, setSmileCoins] = useState<number | null>(null);
@@ -11,7 +11,7 @@ export default function SmileCoins() {
     const fetchSmileCoins = async () => {
       try {
         setIsLoading(true);
-        const coins = await codeprojektDashboardBackend.getSmileCoins();
+        const coins = await backendAPI.getSmileCoins();
         setSmileCoins(coins);
         setError(null);
       } catch (err) {
@@ -53,7 +53,9 @@ export default function SmileCoins() {
             <div className="animate-spin">
               <div className="w-8 h-8 border-4 border-yellow-200 dark:border-yellow-900 border-t-yellow-600 dark:border-t-yellow-400 rounded-full"></div>
             </div>
-            <span className="ml-3 text-gray-600 dark:text-gray-400">Loading...</span>
+            <span className="ml-3 text-gray-600 dark:text-gray-400">
+              Loading...
+            </span>
           </div>
         ) : error ? (
           <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
@@ -86,16 +88,6 @@ export default function SmileCoins() {
             </div>
           </div>
         ) : null}
-
-        <div className="mt-8 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-            About Smile Coins
-          </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Smile Coins are a digital currency used for various transactions and rewards on our platform.
-            Use your coins to unlock exclusive features and rewards.
-          </p>
-        </div>
       </div>
     </div>
   );

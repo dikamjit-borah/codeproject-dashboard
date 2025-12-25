@@ -1,3 +1,3 @@
-export * from './adapters/codeprojektDashboardBackend';
+export * from './adapters/backendAPI';
 export { httpClient } from './httpClient';
 export * from './constants';

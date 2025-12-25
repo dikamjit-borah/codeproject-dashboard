@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Smile } from "lucide-react";
-import codeprojektDashboardBackend from "../../api/adapters/codeprojektDashboardBackend";
+import backendAPI from "../../api/adapters/backendAPI";
 
 export default function SmileCoinsDisplay() {
   const [smileCoins, setSmileCoins] = useState<number | null>(null);
@@ -11,7 +11,7 @@ export default function SmileCoinsDisplay() {
     const fetchSmileCoins = async () => {
       try {
         setIsLoading(true);
-        const coins = await codeprojektDashboardBackend.getSmileCoins();
+        const coins = await backendAPI.getSmileCoins();
         setSmileCoins(coins);
         setError(null);
       } catch (err) {
