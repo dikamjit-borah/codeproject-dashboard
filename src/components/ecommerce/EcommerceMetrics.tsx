@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Users, ShoppingCart, IndianRupee, Sparkles, PieChart, TrendingUp } from "lucide-react";
-import Badge from "../ui/badge/Badge";
 import { getMonthlyAnalytics } from "../../api/adapters/backendAPI";
 import type { MonthlyAnalyticsData } from "../../api/adapters/backendAPI";
 

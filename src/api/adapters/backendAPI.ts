@@ -53,6 +53,7 @@ export type MonthlyFinancials = {
   totalSales: number;
   totalCostPriceInBRR: number;
   totalCostPriceInINR: number;
+  netProfitOrLossInINR: number;
 };
 
 export type MonthlyUserAnalytics = {
