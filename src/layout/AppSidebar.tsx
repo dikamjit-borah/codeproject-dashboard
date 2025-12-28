@@ -22,6 +22,11 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
+    icon: <PieChartIcon />,
+    name: "Analytics",
+    path: "/analytics",
+  },
+  {
     icon: <GridIcon />,
     name: "Transactions",
     path: "/transactions",
@@ -30,11 +35,6 @@ const navItems: NavItem[] = [
     icon: <Smile className="w-5 h-5" />,
     name: "Smile Coins",
     path: "/smile-coins",
-  },
-  {
-    icon: <PieChartIcon />,
-    name: "Analytics",
-    path: "/analytics",
   },
   {
     name: "Pages",
