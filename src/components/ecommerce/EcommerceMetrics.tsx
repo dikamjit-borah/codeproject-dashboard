@@ -3,7 +3,12 @@ import { Users, ShoppingCart, IndianRupee, Sparkles, PieChart, TrendingUp } from
 import { getMonthlyAnalytics } from "../../api/adapters/backendAPI";
 import type { MonthlyAnalyticsData } from "../../api/adapters/backendAPI";
 
-export default function EcommerceMetrics() {
+interface EcommerceMetricsProps {
+  month?: number;
+  year?: number;
+}
+
+export default function EcommerceMetrics({ month, year }: EcommerceMetricsProps) {
   const [analyticsData, setAnalyticsData] = useState<MonthlyAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,7 +17,7 @@ export default function EcommerceMetrics() {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
-        const data = await getMonthlyAnalytics();
+        const data = await getMonthlyAnalytics({ month, year });
         setAnalyticsData(data);
         setError(null);
       } catch (err) {
@@ -25,7 +30,7 @@ export default function EcommerceMetrics() {
     };
 
     fetchAnalytics();
-  }, []);
+  }, [month, year]);
 
   const totalUsers = analyticsData?.monthlyAnalytics?.monthlyUserAnalytics?.totalUsers ?? 0;
   const totalSales = analyticsData?.monthlyAnalytics?.monthlyFinancials?.totalSales ?? 0;

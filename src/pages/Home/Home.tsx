@@ -1,6 +1,6 @@
 import EcommerceMetrics from "../../components/ecommerce/EcommerceMetrics";
-import MonthlySalesChart from "../../components/ecommerce/MonthlySalesChart";
-import StatisticsChart from "../../components/ecommerce/StatisticsChart";
+//import MonthlySalesChart from "../../components/ecommerce/MonthlySalesChart";
+//import StatisticsChart from "../../components/ecommerce/StatisticsChart";
 
 
 export default function Home() {
@@ -10,11 +10,11 @@ export default function Home() {
         <div className="col-span-12 space-y-6">
           <EcommerceMetrics />
 
-          <MonthlySalesChart />
+          {/* <MonthlySalesChart /> */}
         </div>
 
         <div className="col-span-12">
-          <StatisticsChart />
+          {/* <StatisticsChart /> */}
         </div>
       </div>
     </>
