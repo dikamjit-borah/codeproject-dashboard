@@ -8,8 +8,6 @@ export default function Analytics() {
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
 
-  const monthName = new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
-
   // Generate list of months
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i + 1,

@@ -15,7 +15,7 @@ export default function App() {
                     <Route path="/login" element={<Login />} />
                     <Route element={<PrivateRoute />}>
                         <Route element={<AppLayout />}>
-                            <Route index path="/" element={<Home />} />
+                            <Route index path="/" element={<Transactions />} />
                             <Route path="/home" element={<Home />} />
                             <Route path="/transactions" element={<Transactions />} />
                             <Route path="/smile-coins" element={<SmileCoins />} />
