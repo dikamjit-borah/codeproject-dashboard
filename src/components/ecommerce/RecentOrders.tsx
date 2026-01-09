@@ -288,17 +288,32 @@ export default function RecentOrders() {
               : "—";
 
           // Extract spuDetails and spuId
-          // Note: spuId is at root level in the API response, spuDetails.spu contains the SPU name
-          const spuDetails = (raw?.spuDetails || md?.spuDetails) as Record<string, unknown> | undefined;
+          // Note: spuDetails can be either an array of objects (new format) or a single object (old format)
+          const spuDetails = (raw?.spuDetails || md?.spuDetails) as 
+            | Array<Record<string, unknown>> 
+            | Record<string, unknown> 
+            | undefined;
+          
+          // Normalize spuDetails to always be an array for consistent processing
+          const spuDetailsArray = Array.isArray(spuDetails) 
+            ? spuDetails 
+            : spuDetails ? [spuDetails] : [];
+          
+          // Get first spuId (from first item in array or root level)
           const spuId = 
             typeof raw?.spuId === "string" 
               ? raw.spuId 
-              : typeof spuDetails?.spuId === "string"
-              ? spuDetails.spuId
+              : spuDetailsArray.length > 0
+              ? (typeof spuDetailsArray[0]?.spuId === "string" ? spuDetailsArray[0].spuId : "—")
               : "—";
+          
+          // Get all SPU names from array and join with comma
           const spu = 
-            typeof spuDetails?.spu === "string" 
-              ? spuDetails.spu 
+            spuDetailsArray.length > 0
+              ? spuDetailsArray
+                  .map((item) => item?.spu)
+                  .filter((s): s is string => typeof s === "string")
+                  .join(", ")
               : "—";
 
           // Extract userDetails
@@ -324,11 +339,28 @@ export default function RecentOrders() {
               ? t.subStatus
               : "—";
 
-          // Extract vendorResponse for remarks (combine order_id and message)
+          // Extract vendorResponses for remarks (combine order_id and message)
+          // Note: vendorResponses is now an array (new format), vendorResponse was single object (old format)
+          const vendorResponses = (raw?.vendorResponses || md?.vendorResponses) as Array<Record<string, unknown>> | undefined;
           const vendorResponse = (raw?.vendorResponse || md?.vendorResponse) as Record<string, unknown> | undefined;
-          const orderId = typeof vendorResponse?.order_id === "string" ? vendorResponse.order_id : "";
-          const message = typeof vendorResponse?.message === "string" ? vendorResponse.message : "";
-          const remarks = [orderId, message].filter(Boolean).join(" - ") || "—";
+          
+          // Use new format (array) if available, otherwise fall back to old format (single object)
+          const vendorResponseArray = Array.isArray(vendorResponses)
+            ? vendorResponses
+            : vendorResponse ? [vendorResponse] : [];
+          
+          // Extract all order_id and message pairs and join with comma
+          const remarks = 
+            vendorResponseArray.length > 0
+              ? vendorResponseArray
+                  .map((item) => {
+                    const orderId = typeof item?.order_id === "string" ? item.order_id : "";
+                    const message = typeof item?.message === "string" ? item.message : "";
+                    return [orderId, message].filter(Boolean).join(" - ");
+                  })
+                  .filter(Boolean)
+                  .join(", ")
+              : "—";
 
           // Extract createdAt and updatedAt
           const createdAt = 
