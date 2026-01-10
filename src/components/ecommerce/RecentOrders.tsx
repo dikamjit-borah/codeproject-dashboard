@@ -159,11 +159,17 @@ export default function RecentOrders() {
         size: 200,
         minSize: 100,
         maxSize: 400,
-        cell: (info) => (
-          <div className="truncate text-center" title={info.getValue()}>
-            {info.getValue()}
-          </div>
-        ),
+        cell: (info) => {
+          const spu = info.getValue();
+          const spuLines = spu.split(",").map((item) => item.trim());
+          return (
+            <div className="text-center whitespace-pre-wrap" title={spu}>
+              {spuLines.map((item, index) => (
+                <div key={index}>{item}</div>
+              ))}
+            </div>
+          );
+        },
       }),
       columnHelper.accessor("username", {
         header: "Username",
@@ -195,11 +201,17 @@ export default function RecentOrders() {
         size: 250,
         minSize: 150,
         maxSize: 500,
-        cell: (info) => (
-          <div className="truncate text-center" title={info.getValue()}>
-            {info.getValue()}
-          </div>
-        ),
+        cell: (info) => {
+          const remarks = info.getValue();
+          const remarkLines = remarks.split(",").map((remark) => remark.trim());
+          return (
+            <div className="text-center whitespace-pre-wrap" title={remarks}>
+              {remarkLines.map((remark, index) => (
+                <div key={index}>{remark}</div>
+              ))}
+            </div>
+          );
+        },
       }),
       columnHelper.accessor("createdAt", {
         header: "Created At",
@@ -414,7 +426,8 @@ export default function RecentOrders() {
           disableMobile: true,
           onChange: (selectedDates) => {
             if (selectedDates.length > 0) {
-              const dateStr = selectedDates[0].toISOString().split("T")[0];
+              const date = selectedDates[0];
+              const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
               setStartDate(dateStr);
             } else {
               setStartDate("");
@@ -431,7 +444,8 @@ export default function RecentOrders() {
           disableMobile: true,
           onChange: (selectedDates) => {
             if (selectedDates.length > 0) {
-              const dateStr = selectedDates[0].toISOString().split("T")[0];
+              const date = selectedDates[0];
+              const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
               setEndDate(dateStr);
             } else {
               setEndDate("");
