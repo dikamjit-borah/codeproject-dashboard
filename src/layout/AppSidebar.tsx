@@ -10,6 +10,7 @@ import {
   PageIcon,
   PieChartIcon,
   PlugInIcon,
+  GroupIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -36,6 +37,11 @@ const navItems: NavItem[] = [
     name: "Smile Coins",
     path: "/smile-coins",
   },
+    {
+      icon: <GroupIcon />,
+      name: "Users",
+      path: "/users",
+    },
   {
     name: "Pages",
     icon: <PageIcon />,

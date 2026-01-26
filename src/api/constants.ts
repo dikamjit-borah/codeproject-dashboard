@@ -18,4 +18,5 @@ export const CODEPROJEKT_DASHBOARD_BACKEND_ENDPOINTS = {
   LOGIN: "/auth/login",
   TRANSACTIONS: "/v1/dashboard/transactions",
   MONTHLY_ANALYTICS: "/v1/dashboard/monthly-analytics",
+  USERS: "/v1/dashboard/users",
 };

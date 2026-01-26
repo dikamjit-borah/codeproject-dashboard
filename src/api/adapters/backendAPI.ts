@@ -273,9 +273,77 @@ export const getSmileCoins = async (): Promise<number> => {
   }
 };
 
+// Users API types
+export type User = {
+  id: string;
+  name: string;
+  email?: string;
+  [key: string]: unknown;
+};
+
+export type GetUsersParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  [key: string]: unknown;
+};
+
+export const getUsers = async (
+  params: GetUsersParams
+): Promise<PagedResult<User>> => {
+  try {
+    const resp = await httpClient.get(CODEPROJEKT_DASHBOARD_BACKEND_ENDPOINTS.USERS, {
+      params,
+    });
+    const wrapper = resp.data as unknown;
+    // API responds with wrapper { ..., data: { page, limit, total, data: [] } }
+    const inner =
+      wrapper && typeof wrapper === "object" && "data" in (wrapper as Record<string, unknown>)
+        ? ((wrapper as Record<string, unknown>)["data"] as Record<string, unknown>)
+        : (wrapper as Record<string, unknown>) ?? {};
+
+    const page = Number((inner as Record<string, unknown>).page ?? params.page ?? 1);
+    const limit = Number((inner as Record<string, unknown>).limit ?? params.limit ?? 20);
+    const total = Number((inner as Record<string, unknown>).total ?? 0);
+
+    // Prefer `data` array, fallback to `users`
+    const rawUsers = Array.isArray((inner as Record<string, unknown>).data as unknown)
+      ? (((inner as Record<string, unknown>).data as unknown[]) ?? [])
+      : Array.isArray((inner as Record<string, unknown>).users as unknown)
+      ? (((inner as Record<string, unknown>).users as unknown[]) ?? [])
+      : [];
+
+    const items: User[] = rawUsers.map((raw) => {
+      const u = (raw as Record<string, unknown>) || {};
+      return {
+        id: (u["id"] as string) ?? (u["_id"] as string) ?? String(Math.random()),
+        name:
+          (u["name"] as string) ??
+          ((u["profile"] as Record<string, unknown> | undefined)?.["name"] as string) ??
+          "Unknown",
+        email:
+          (u["email"] as string) ??
+          ((u["profile"] as Record<string, unknown> | undefined)?.["email"] as string) ??
+          undefined,
+        ...u,
+      };
+    });
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+    };
+  } catch (err: unknown) {
+    throw formatHttpError(err);
+  }
+};
+
 export default {
   getTransactions,
   login,
   getMonthlyAnalytics,
   getSmileCoins,
+  getUsers,
 };

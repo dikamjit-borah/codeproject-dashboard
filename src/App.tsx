@@ -6,24 +6,26 @@ import SmileCoins from "./pages/SmileCoins/SmileCoins";
 import Analytics from "./pages/Analytics/Analytics";
 import Login from "./pages/Login/Login";
 import PrivateRoute from "./routes/PrivateRoute";
+import Users from "./pages/Users/Users";
 
 export default function App() {
-    return (
-        <>
-            <Router>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route element={<PrivateRoute />}>
-                        <Route element={<AppLayout />}>
-                            <Route index path="/" element={<Transactions />} />
-                            <Route path="/home" element={<Home />} />
-                            <Route path="/transactions" element={<Transactions />} />
-                            <Route path="/smile-coins" element={<SmileCoins />} />
-                            <Route path="/analytics" element={<Analytics />} />
-                        </Route>
-                    </Route>
-                </Routes>
-            </Router>
-        </>
-    )
+  return (
+    <>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<PrivateRoute />}>
+            <Route element={<AppLayout />}>
+              <Route index path="/" element={<Transactions />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/transactions" element={<Transactions />} />
+              <Route path="/smile-coins" element={<SmileCoins />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/users" element={<Users />} />
+            </Route>
+          </Route>
+        </Routes>
+      </Router>
+    </>
+  );
 }
