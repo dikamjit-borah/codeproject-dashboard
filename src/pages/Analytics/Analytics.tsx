@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { BarChart3, Calendar } from "lucide-react";
 import EcommerceMetrics from "../../components/ecommerce/EcommerceMetrics";
 /* import MonthlySalesChart from "../../components/ecommerce/MonthlySalesChart";
 import StatisticsChart from "../../components/ecommerce/StatisticsChart"; */
@@ -18,11 +17,11 @@ export default function Analytics() {
   // Generate list of years (current year and 5 previous years)
   const years = Array.from({ length: 6 }, (_, i) => currentDate.getFullYear() - i);
 
-  const isCurrentMonthSelected = 
+  /* const isCurrentMonthSelected = 
     selectedMonth === currentDate.getMonth() + 1 && 
     selectedYear === currentDate.getFullYear();
 
-  const selectedMonthName = months.find(m => m.value === selectedMonth)?.label || '';
+  const selectedMonthName = months.find(m => m.value === selectedMonth)?.label || ''; */
 
   return (
     <div className="grid grid-cols-12 gap-4 md:gap-6">

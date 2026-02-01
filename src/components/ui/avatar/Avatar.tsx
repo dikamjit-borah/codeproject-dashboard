@@ -1,8 +1,11 @@
+import React, { useState, useEffect } from "react";
+
 interface AvatarProps {
   src: string; // URL of the avatar image
   alt?: string; // Alt text for the avatar
   size?: "xsmall" | "small" | "medium" | "large" | "xlarge" | "xxlarge"; // Avatar size
   status?: "online" | "offline" | "busy" | "none"; // Status indicator
+  name?: string; // Name for generating initials placeholder
 }
 
 const sizeClasses = {
@@ -12,6 +15,15 @@ const sizeClasses = {
   large: "h-12 w-12 max-w-12",
   xlarge: "h-14 w-14 max-w-14",
   xxlarge: "h-16 w-16 max-w-16",
+};
+
+const textSizeClasses = {
+  xsmall: "text-xs",
+  small: "text-sm",
+  medium: "text-base",
+  large: "text-lg",
+  xlarge: "text-xl",
+  xxlarge: "text-2xl",
 };
 
 const statusSizeClasses = {
@@ -34,11 +46,95 @@ const Avatar: React.FC<AvatarProps> = ({
   alt = "User Avatar",
   size = "medium",
   status = "none",
+  name,
 }) => {
+  const [showPlaceholder, setShowPlaceholder] = useState(!src || src.trim() === "");
+  const [hasTriedFallback, setHasTriedFallback] = useState(false);
+
+  // Reset state when src changes
+  useEffect(() => {
+    const hasValidSrc = src && src.trim() !== "";
+    setShowPlaceholder(!hasValidSrc);
+    setHasTriedFallback(false);
+  }, [src]);
+
+  const handleImageError = () => {
+    if (!hasTriedFallback && src && src.includes('googleusercontent.com')) {
+      // Try to load the image without size parameter for Google URLs
+      const urlWithoutSize = src.replace(/=s\d+-c$/, '');
+      if (urlWithoutSize !== src) {
+        setHasTriedFallback(true);
+        // Force re-render with new URL by updating the key
+        return;
+      }
+    }
+    // Show placeholder if image fails to load
+    setShowPlaceholder(true);
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name || name === "—") return "?";
+    return name
+      .split(" ")
+      .map(word => word.charAt(0).toUpperCase())
+      .slice(0, 2)
+      .join("");
+  };
+
+  const getBackgroundColor = (name?: string) => {
+    if (!name || name === "—") return "bg-gray-400";
+    
+    // Generate a consistent color based on the name
+    const colors = [
+      "bg-blue-500",
+      "bg-green-500", 
+      "bg-purple-500",
+      "bg-pink-500",
+      "bg-indigo-500",
+      "bg-yellow-500",
+      "bg-red-500",
+      "bg-teal-500",
+    ];
+    
+    const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  // If no valid src or placeholder should be shown
+  if (showPlaceholder || !src || src.trim() === "") {
+    return (
+      <div className={`relative rounded-full ${sizeClasses[size]}`}>
+        <div className={`flex items-center justify-center rounded-full w-full h-full text-white font-medium ${getBackgroundColor(name)} ${textSizeClasses[size]}`}>
+          {getInitials(name)}
+        </div>
+        
+        {/* Status Indicator */}
+        {status !== "none" && (
+          <span
+            className={`absolute bottom-0 right-0 rounded-full border-[1.5px] border-white dark:border-gray-900 ${
+              statusSizeClasses[size]
+            } ${statusColorClasses[status] || ""}`}
+          ></span>
+        )}
+      </div>
+    );
+  }
+
+  // Try to show image
+  const imgSrc = hasTriedFallback && src.includes('googleusercontent.com') 
+    ? src.replace(/=s\d+-c$/, '') 
+    : src;
+
   return (
-    <div className={`relative  rounded-full ${sizeClasses[size]}`}>
-      {/* Avatar Image */}
-      <img src={src} alt={alt} className="object-cover rounded-full" />
+    <div className={`relative rounded-full ${sizeClasses[size]}`}>
+      <img 
+        key={`${imgSrc}-${hasTriedFallback}`} // Force re-render when trying fallback
+        src={imgSrc} 
+        alt={alt} 
+        className="object-cover rounded-full w-full h-full" 
+        onError={handleImageError}
+        crossOrigin="anonymous"
+      />
 
       {/* Status Indicator */}
       {status !== "none" && (

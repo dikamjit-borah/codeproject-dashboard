@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { getUsers, type User } from "../../api/adapters/backendAPI";
-import Avatar from "../../components/ui/avatar/Avatar";
 import { Table, TableHeader, TableBody, TableRow, TableCell } from "../../components/ui/table";
+import Avatar from "../../components/ui/avatar/Avatar";
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,6 +17,7 @@ type UserRow = {
   name: string;
   email: string;
   img: string;
+  isActive: boolean;
 };
 
 const columnHelper = createColumnHelper<UserRow>();
@@ -28,9 +29,12 @@ const Users: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [limit] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
+  const [userStatuses, setUserStatuses] = useState<Record<string, boolean>>({});
+
+  // Fixed page size for consistent user experience
+  const pageLimit = 10;
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -39,14 +43,25 @@ const Users: React.FC = () => {
       try {
         const params: { page: number; limit: number; search?: string } = {
           page: currentPage,
-          limit,
+          limit: pageLimit,
         };
         const trimmed = appliedSearchTerm.trim();
         if (trimmed) params.search = trimmed;
         const result = await getUsers(params);
         setUsers(result.items);
         setTotal(result.total);
-        setTotalPages(Math.max(1, Math.ceil(result.total / result.limit)));
+        setTotalPages(Math.max(1, Math.ceil(result.total / pageLimit)));
+        
+        // Initialize user statuses (default to active)
+        const statuses: Record<string, boolean> = {};
+        result.items.forEach(user => {
+          if (!(user.id in userStatuses)) {
+            statuses[user.id] = true; // Default to active
+          }
+        });
+        if (Object.keys(statuses).length > 0) {
+          setUserStatuses(prev => ({ ...prev, ...statuses }));
+        }
       } catch (err: any) {
         setError(err?.message || "Failed to fetch users");
       } finally {
@@ -54,7 +69,7 @@ const Users: React.FC = () => {
       }
     };
     fetchUsers();
-  }, [currentPage, limit, appliedSearchTerm]);
+  }, [currentPage, pageLimit, appliedSearchTerm]); // Removed userStatuses from dependencies
 
   const applySearch = () => {
     setAppliedSearchTerm(searchTerm.trim());
@@ -65,6 +80,13 @@ const Users: React.FC = () => {
     setSearchTerm("");
     setAppliedSearchTerm("");
     setCurrentPage(1);
+  };
+
+  const handleStatusToggle = (userId: string) => {
+    setUserStatuses(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
   };
 
   const handlePageChange = (page: number) => {
@@ -97,63 +119,68 @@ const Users: React.FC = () => {
     return pages;
   };
 
-  const displayUsers = users.map((u) => {
-    const record = u as unknown as Record<string, unknown>;
-    const profile = (record["profile"] as Record<string, unknown> | undefined) ?? undefined;
+  const displayUsers = useMemo(() => {
+    return users.map((u) => {
+      const record = u as unknown as Record<string, unknown>;
+      const profile = (record["profile"] as Record<string, unknown> | undefined) ?? undefined;
 
-    const name =
-      (typeof u.name === "string" && u.name !== "Unknown" ? u.name : undefined) ??
-      (typeof profile?.["name"] === "string" ? (profile["name"] as string) : undefined) ??
-      (typeof profile?.["fullName"] === "string" ? (profile["fullName"] as string) : undefined) ??
-      (typeof profile?.["username"] === "string" ? (profile["username"] as string) : undefined) ??
-      "—";
+      const name =
+        (typeof u.name === "string" && u.name !== "Unknown" ? u.name : undefined) ??
+        (typeof profile?.["name"] === "string" ? (profile["name"] as string) : undefined) ??
+        (typeof profile?.["fullName"] === "string" ? (profile["fullName"] as string) : undefined) ??
+        (typeof profile?.["username"] === "string" ? (profile["username"] as string) : undefined) ??
+        "—";
 
-    const email =
-      u.email ??
-      (typeof profile?.["email"] === "string" ? (profile["email"] as string) : undefined) ??
-      (typeof profile?.["mail"] === "string" ? (profile["mail"] as string) : undefined) ??
-      "—";
+      const email =
+        u.email ??
+        (typeof profile?.["email"] === "string" ? (profile["email"] as string) : undefined) ??
+        (typeof profile?.["mail"] === "string" ? (profile["mail"] as string) : undefined) ??
+        "—";
 
-    const imgCandidates = [
-      record["img"],
-      record["image"],
-      record["avatar"],
-      profile?.["img"],
-      profile?.["image"],
-      profile?.["avatar"],
-      profile?.["picture"],
-      profile?.["photoUrl"],
-      profile?.["photoURL"],
-    ];
-    const img = imgCandidates.find((v) => typeof v === "string" && v.length > 0) as string | undefined;
+      const imgCandidates = [
+        (u as any).photoURL, // Direct access to photoURL from user object
+        profile?.["photoURL"],
 
-    return {
-      id: u.id,
-      name,
-      email,
-      img: img ?? "/images/user/owner.png",
-    };
-  });
+
+      ];
+      const img = imgCandidates.find((v) => typeof v === "string" && v.length > 0) as string | undefined;
+
+      return {
+        id: u.id,
+        name,
+        email,
+        img: img ?? "/images/user/owner.png",
+        isActive: userStatuses[u.id] ?? true,
+      };
+    });
+  }, [users, userStatuses]);
+
+  // Memoize mobile check to prevent re-renders
+  const isMobile = useMemo(() => {
+    return typeof window !== "undefined" && window.innerWidth < 640;
+  }, []);
 
   // Define columns with resizable functionality
   const columns = useMemo(
     () => [
       columnHelper.accessor("img", {
-        header: "Image",
-        size: 60,
-        minSize: 50,
-        maxSize: 80,
+        header: "Avatar",
         cell: (info) => (
           <div className="flex justify-center">
-            <Avatar src={info.getValue()} alt="User Avatar" size="small" />
+            <Avatar
+              src={info.getValue()}
+              alt={info.row.original.name}
+              name={info.row.original.name}
+              size="small"
+            />
           </div>
         ),
+        size: 80,
+        minSize: 60,
+        maxSize: 100,
       }),
       columnHelper.accessor("name", {
         header: "Name",
-        size: 200,
-        minSize: 100,
-        maxSize: 400,
         cell: (info) => (
           <div className="truncate" title={info.getValue()}>
             {info.getValue()}
@@ -162,30 +189,65 @@ const Users: React.FC = () => {
       }),
       columnHelper.accessor("email", {
         header: "Email",
-        size: 250,
-        minSize: 150,
-        maxSize: 500,
         cell: (info) => (
           <div className="truncate" title={info.getValue()}>
             {info.getValue()}
           </div>
         ),
       }),
+      columnHelper.accessor("isActive", {
+        header: "Status",
+        cell: (info) => {
+          const userId = info.row.original.id;
+          const isActive = info.getValue();
+          return (
+            <div className="flex justify-center">
+              <button
+                onClick={() => handleStatusToggle(userId)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                  isActive
+                    ? "bg-green-500 hover:bg-green-600"
+                    : "bg-gray-300 hover:bg-gray-400 dark:bg-gray-600 dark:hover:bg-gray-500"
+                }`}
+                title={isActive ? "Active - Click to deactivate" : "Inactive - Click to activate"}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isActive ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          );
+        },
+        size: 100,
+        minSize: 80,
+        maxSize: 120,
+      }),
     ],
-    []
+    [userStatuses]
   );
 
   const table = useReactTable({
     data: displayUsers,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    columnResizeMode: "onChange" as ColumnResizeMode,
-    enableColumnResizing: true,
-    defaultColumn: {
-      minSize: 50,
-      maxSize: 800,
-      size: 150,
-    },
+    // Disable column resizing for mobile
+    ...(isMobile
+      ? {
+          enableColumnResizing: false,
+          columnResizeMode: undefined,
+          defaultColumn: {},
+        }
+      : {
+          enableColumnResizing: true,
+          columnResizeMode: "onChange" as ColumnResizeMode,
+          defaultColumn: {
+            minSize: 50,
+            maxSize: 800,
+            size: 150,
+          },
+        }),
   });
 
   return (
@@ -219,8 +281,8 @@ const Users: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-full overflow-x-auto">
-        <Table className="w-full table-fixed">
+      <div className="max-w-full overflow-x-auto" style={{ maxWidth: "100vw" }}>
+        <Table className={isMobile ? "w-full" : "w-full table-fixed"}>
           <TableHeader className="border-gray-100 dark:border-gray-800 border-y">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -306,7 +368,7 @@ const Users: React.FC = () => {
       {!loading && !error && totalPages > 1 && (
         <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
           <div className="text-sm text-gray-500 dark:text-gray-400 text-center sm:text-left">
-            Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, total)} of {total} users
+            Showing {((currentPage - 1) * pageLimit) + 1} to {Math.min(currentPage * pageLimit, total)} of {total} users
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
