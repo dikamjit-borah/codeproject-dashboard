@@ -7,6 +7,7 @@ import Analytics from "./pages/Analytics/Analytics";
 import Login from "./pages/Login/Login";
 import PrivateRoute from "./routes/PrivateRoute";
 import Users from "./pages/Users/Users";
+import AppDetails from "./pages/AppDetails/AppDetails";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
               <Route path="/smile-coins" element={<SmileCoins />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/users" element={<Users />} />
+              <Route path="/app-details" element={<AppDetails />} />
             </Route>
           </Route>
         </Routes>
