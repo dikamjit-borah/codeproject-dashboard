@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 // Props for Table
-interface TableProps {
+interface TableProps extends React.TableHTMLAttributes<HTMLTableElement> {
   children: ReactNode; // Table content (thead, tbody, etc.)
   className?: string; // Optional className for styling
 }
@@ -25,7 +25,7 @@ interface TableRowProps {
 }
 
 // Props for TableCell
-interface TableCellProps {
+interface TableCellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   children: ReactNode; // Cell content
   isHeader?: boolean; // If true, renders as <th>, otherwise <td>
   className?: string; // Optional className for styling
@@ -33,8 +33,8 @@ interface TableCellProps {
 }
 
 // Table Component
-const Table: React.FC<TableProps> = ({ children, className }) => {
-  return <table className={`min-w-full  ${className}`}>{children}</table>;
+const Table: React.FC<TableProps> = ({ children, className, ...props }) => {
+  return <table className={`min-w-full  ${className}`} {...props}>{children}</table>;
 };
 
 // TableHeader Component
@@ -58,13 +58,14 @@ const TableCell: React.FC<TableCellProps> = ({
   isHeader = false,
   className,
   colSpan,
+  ...props
 }) => {
   const CellTag = isHeader ? "th" : "td";
   // pass colSpan attribute if provided
   return (
     // passing colSpan to either th or td is valid in DOM
     // TypeScript will accept this at runtime; no suppression needed
-    <CellTag colSpan={colSpan} className={` ${className}`}>
+    <CellTag colSpan={colSpan} className={` ${className}`} {...props}>
       {children}
     </CellTag>
   );

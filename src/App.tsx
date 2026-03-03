@@ -2,19 +2,32 @@ import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
 import Home from "./pages/Home/Home";
 import Transactions from "./pages/Transactions/Transactions";
+import SmileCoins from "./pages/SmileCoins/SmileCoins";
+import Analytics from "./pages/Analytics/Analytics";
+import Login from "./pages/Login/Login";
+import PrivateRoute from "./routes/PrivateRoute";
+import Users from "./pages/Users/Users";
+import AppDetails from "./pages/AppDetails/AppDetails";
 
 export default function App() {
-    return (
-       <>
-        <Router>
-            <Routes>
-                <Route element={<AppLayout />} >
-                    <Route index path="/" element={<Home />} />
-
-                    <Route path="/transactions" element={<Transactions />} />
-                </Route>
-            </Routes>
-        </Router>
-       </>
-    )
+  return (
+    <>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<PrivateRoute />}>
+            <Route element={<AppLayout />}>
+              <Route index path="/" element={<Transactions />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/transactions" element={<Transactions />} />
+              <Route path="/smile-coins" element={<SmileCoins />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/users" element={<Users />} />
+              <Route path="/app-details" element={<AppDetails />} />
+            </Route>
+          </Route>
+        </Routes>
+      </Router>
+    </>
+  );
 }

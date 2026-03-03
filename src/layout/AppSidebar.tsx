@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
+import { Smile } from "lucide-react";
 
-// Assume these icons are imported from an icon library
 import {
   BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
-  ListIcon,
   PageIcon,
   PieChartIcon,
   PlugInIcon,
-  TableIcon,
-  UserCircleIcon,
+  GroupIcon,
+  DocsIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 
@@ -26,10 +24,30 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
+    icon: <PieChartIcon />,
+    name: "Analytics",
+    path: "/analytics",
+  },
+  {
     icon: <GridIcon />,
     name: "Transactions",
     path: "/transactions",
-    },
+  },
+  {
+    icon: <Smile className="w-5 h-5" />,
+    name: "Smile Coins",
+    path: "/smile-coins",
+  },
+  {
+    icon: <GroupIcon />,
+    name: "Users",
+    path: "/users",
+  },
+  {
+    icon: <DocsIcon />,
+    name: "App Details",
+    path: "/app-details",
+  },
   {
     name: "Pages",
     icon: <PageIcon />,
@@ -287,25 +305,25 @@ const AppSidebar: React.FC = () => {
             <>
               <img
                 className="dark:hidden"
-                src="/images/logo/logo.svg"
+                src="/images/logo/logo.png"
                 alt="Logo"
-                width={150}
-                height={40}
+                width={120}
+                height={32}
               />
               <img
                 className="hidden dark:block"
-                src="/images/logo/logo-dark.svg"
+                src="/images/logo/logo-dark.png"
                 alt="Logo"
-                width={150}
-                height={40}
+                width={120}
+                height={32}
               />
             </>
           ) : (
             <img
-              src="/images/logo/logo-icon.svg"
+              src="/images/logo/logo-icon.png"
               alt="Logo"
-              width={32}
-              height={32}
+              width={28}
+              height={28}
             />
           )}
         </Link>
