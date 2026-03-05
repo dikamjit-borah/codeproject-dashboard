@@ -1,22 +1,229 @@
-import { useState, useRef } from "react";
-import { Upload, X } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Upload, X, Loader2, Bell, ImagePlay, Gamepad2, Save, GripVertical, RefreshCw } from "lucide-react";
+import {
+  fetchCarouselImages,
+  uploadCarouselImage,
+  saveCarouselImages,
+  deleteCarouselImage,
+  getCarouselImageURL,
+  type CarouselImage,
+  fetchGameCardImages,
+  uploadGameCardImage,
+  saveGameCardImages,
+  deleteGameCardImage,
+  getGameCardImageURL,
+  type GameCardImage,
+  fetchNotice,
+  saveNotice,
+} from "../../lib/appMediaService";
 
 export default function AppDetails() {
-  const [notice, setNotice] = useState("");
-  const [exchangeRate, setExchangeRate] = useState("");
-  const [smileCoinRate, setSmileCoinRate] = useState("");
-  const [carouselImages, setCarouselImages] = useState<
-    Array<{ id: string; url: string; file: File }>
-  >([]);
-  const [gameImages, setGameImages] = useState<
-    Array<{ id: string; url: string; file: File }>
-  >([]);
+  const [noticeHeading, setNoticeHeading] = useState("");
+  const [noticeText, setNoticeText] = useState("");
+  const [loadingNotice, setLoadingNotice] = useState(true);
+  const [savingNotice, setSavingNotice] = useState(false);
+  const [noticeError, setNoticeError] = useState<string | null>(null);
+  // Carousel — Firebase backed
+  const [carouselImages, setCarouselImages] = useState<CarouselImage[]>([]);
+  const [carouselPreviewURLs, setCarouselPreviewURLs] = useState<Record<string, string>>({});
+  const [loadingCarousel, setLoadingCarousel] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [carouselError, setCarouselError] = useState<string | null>(null);
+
+  // Game card images — Firebase backed
+  const [gameCardImages, setGameCardImages] = useState<GameCardImage[]>([]);
+  const [gameCardPreviewURLs, setGameCardPreviewURLs] = useState<Record<string, string>>({});
+  const [loadingGameCards, setLoadingGameCards] = useState(true);
+  const [uploadingGame, setUploadingGame] = useState(false);
+  const [uploadGameProgress, setUploadGameProgress] = useState(0);
+  const [savingGame, setSavingGame] = useState(false);
+  const [gameCardError, setGameCardError] = useState<string | null>(null);
+
   const [dragActive, setDragActive] = useState(false);
   const [gameDragActive, setGameDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gameFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Dirty tracking
+  const savedNoticeRef = useRef({ heading: "", text: "" });
+  const [carouselDirty, setCarouselDirty] = useState(false);
+  const [gameCardsDirty, setGameCardsDirty] = useState(false);
+
+  // Carousel reorder
+  const cardDragSrcId = useRef<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  // Carousel replace
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
+  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
+  const [reuploading, setReuploading] = useState(false);
+  const [reuploadProgress, setReuploadProgress] = useState(0);
+
+  // Game card reorder
+  const gameCardDragSrcId = useRef<string | null>(null);
+  const [draggingGameId, setDraggingGameId] = useState<string | null>(null);
+  const [dragOverGameSlot, setDragOverGameSlot] = useState<number | null>(null);
+
+  // Game card replace
+  const gameReplaceFileInputRef = useRef<HTMLInputElement>(null);
+  const [gameReplaceTargetId, setGameReplaceTargetId] = useState<string | null>(null);
+  const [gameReuploading, setGameReuploading] = useState(false);
+  const [gameReuploadProgress, setGameReuploadProgress] = useState(0);
+
+  // ── Load notice from Firebase on mount ───────────────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      setLoadingNotice(true);
+      setNoticeError(null);
+      try {
+        const notice = await fetchNotice();
+        setNoticeHeading(notice.heading);
+        setNoticeText(notice.text);
+        savedNoticeRef.current = { heading: notice.heading, text: notice.text };
+      } catch (err) {
+        console.error("Failed to load notice:", err);
+        setNoticeError("Failed to load notice");
+      } finally {
+        setLoadingNotice(false);
+      }
+    };
+    load();
+  }, []);
+
+  const handleSaveNotice = useCallback(async () => {
+    setSavingNotice(true);
+    setNoticeError(null);
+    try {
+      await saveNotice({ heading: noticeHeading, text: noticeText });
+      savedNoticeRef.current = { heading: noticeHeading, text: noticeText };
+      alert("Notice saved!");
+    } catch (err) {
+      console.error("Save notice failed:", err);
+      setNoticeError("Failed to save notice. Please try again.");
+    } finally {
+      setSavingNotice(false);
+    }
+  }, [noticeHeading, noticeText]);
+
+  // ── Load game card images from Firebase on mount ──────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      setLoadingGameCards(true);
+      setGameCardError(null);
+      try {
+        const images = await fetchGameCardImages();
+        setGameCardImages(images);
+        const urlMap: Record<string, string> = {};
+        await Promise.all(
+          images.map(async (img) => {
+            urlMap[img.id] = await getGameCardImageURL(img.storagePath);
+          })
+        );
+        setGameCardPreviewURLs(urlMap);
+        setGameCardsDirty(false);
+      } catch (err) {
+        console.error("Failed to load game cards:", err);
+        setGameCardError("Failed to load game card images");
+      } finally {
+        setLoadingGameCards(false);
+      }
+    };
+    load();
+  }, []);
+
+  // ── Load carousel from Firebase on mount ────────────────────────────────
+  useEffect(() => {
+    const load = async () => {
+      setLoadingCarousel(true);
+      setCarouselError(null);
+      try {
+        const images = await fetchCarouselImages();
+        setCarouselImages(images);
+        // Resolve preview URLs for each image
+        const urlMap: Record<string, string> = {};
+        await Promise.all(
+          images.map(async (img) => {
+            urlMap[img.id] = await getCarouselImageURL(img.storagePath);
+          })
+        );
+        setCarouselPreviewURLs(urlMap);
+        setCarouselDirty(false);
+      } catch (err) {
+        console.error("Failed to load carousel:", err);
+        setCarouselError("Failed to load carousel images");
+      } finally {
+        setLoadingCarousel(false);
+      }
+    };
+    load();
+  }, []);
+
+  // ── Upload new images to Firebase Storage ─────────────────────────────────
+  const handleFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (!imageFiles.length) return;
+    setUploading(true);
+    setCarouselError(null);
+    try {
+      for (const file of imageFiles) {
+        const img = await uploadCarouselImage(file, setUploadProgress);
+        const url = await getCarouselImageURL(img.storagePath);
+        setCarouselImages((prev) => {
+          const updated = [...prev, { ...img, order: prev.length }];
+          return updated;
+        });
+        setCarouselPreviewURLs((prev) => ({ ...prev, [img.id]: url }));
+        setCarouselDirty(true);
+      }
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setCarouselError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }, []);
+
+  // ── Delete a carousel image ───────────────────────────────────────────────
+  const removeImage = useCallback(async (img: CarouselImage) => {
+    try {
+      await deleteCarouselImage(img.storagePath);
+      setCarouselImages((prev) =>
+        prev.filter((i) => i.id !== img.id).map((i, idx) => ({ ...i, order: idx }))
+      );
+      setCarouselPreviewURLs((prev) => {
+        const next = { ...prev };
+        delete next[img.id];
+        return next;
+      });
+      setCarouselDirty(true);
+    } catch (err) {
+      console.error("Delete failed:", err);
+      setCarouselError("Failed to delete image.");
+    }
+  }, []);
+
+  // ── Save carousel order to Firestore ─────────────────────────────────────
+  const handleSaveCarousel = useCallback(async () => {
+    setSaving(true);
+    setCarouselError(null);
+    try {
+      await saveCarouselImages(carouselImages);
+      setCarouselDirty(false);
+      alert("Carousel saved!");
+    } catch (err) {
+      console.error("Save failed:", err);
+      setCarouselError("Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }, [carouselImages]);
+
   const handleDrag = (e: React.DragEvent) => {
+    if (cardDragSrcId.current) return; // card reorder in progress — ignore
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
@@ -27,55 +234,192 @@ export default function AppDetails() {
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    if (cardDragSrcId.current) return;
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
-    const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
+    handleFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      handleFiles(files);
-    }
+    if (e.target.files) handleFiles(Array.from(e.target.files));
   };
 
-  const handleFiles = (files: File[]) => {
-    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+  // ── Carousel card drag-to-reorder ─────────────────────────────────────────
+  const handleCardDragStart = (id: string) => {
+    cardDragSrcId.current = id;
+    setDraggingId(id);
+  };
 
-    imageFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const newImage = {
-          id: Math.random().toString(36).substr(2, 9),
-          url: e.target?.result as string,
-          file: file,
-        };
-        setCarouselImages((prev) => [...prev, newImage]);
-      };
-      reader.readAsDataURL(file);
+  const handleCardDragOver = (e: React.DragEvent, id: string) => {
+    if (!cardDragSrcId.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverId(id);
+  };
+
+  const handleCardDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const srcId = cardDragSrcId.current;
+    cardDragSrcId.current = null;
+    setDraggingId(null);
+    setDragOverId(null);
+    if (!srcId || srcId === targetId) return;
+    setCarouselDirty(true);
+    setCarouselImages((prev) => {
+      const next = [...prev];
+      const srcIdx = next.findIndex((i) => i.id === srcId);
+      const tgtIdx = next.findIndex((i) => i.id === targetId);
+      if (srcIdx < 0 || tgtIdx < 0) return prev;
+      const [moved] = next.splice(srcIdx, 1);
+      next.splice(tgtIdx, 0, moved);
+      return next.map((img, idx) => ({ ...img, order: idx }));
     });
   };
 
-  const removeImage = (id: string) => {
-    setCarouselImages((prev) => prev.filter((img) => img.id !== id));
+  const handleCardDragEnd = () => {
+    cardDragSrcId.current = null;
+    setDraggingId(null);
+    setDragOverId(null);
   };
 
-  const removeGameImage = (id: string) => {
-    setGameImages((prev) => prev.filter((img) => img.id !== id));
+  // ── Carousel image replace ────────────────────────────────────────────────
+  const handleReplaceClick = (imgId: string) => {
+    setReplaceTargetId(imgId);
+    replaceFileInputRef.current?.click();
   };
 
-  const handleButtonClick = () => {
-    fileInputRef.current?.click();
+  const handleReplaceFileInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !replaceTargetId) return;
+    const targetImg = carouselImages.find((i) => i.id === replaceTargetId);
+    if (!targetImg) return;
+    setReuploading(true);
+    setCarouselError(null);
+    try {
+      await deleteCarouselImage(targetImg.storagePath);
+      const newImg = await uploadCarouselImage(file, setReuploadProgress);
+      const url = await getCarouselImageURL(newImg.storagePath);
+      setCarouselImages((prev) =>
+        prev.map((i) => i.id === replaceTargetId ? { ...newImg, order: i.order } : i)
+      );
+      setCarouselPreviewURLs((prev) => {
+        const next = { ...prev };
+        delete next[replaceTargetId];
+        next[newImg.id] = url;
+        return next;
+      });
+      setCarouselDirty(true);
+    } catch (err) {
+      console.error("Replace failed:", err);
+      setCarouselError("Failed to replace image. Please try again.");
+    } finally {
+      setReuploading(false);
+      setReuploadProgress(0);
+      setReplaceTargetId(null);
+    }
+  }, [replaceTargetId, carouselImages]);
+
+  // ── Game card drag-to-reorder ────────────────────────────────────────────
+  const handleGameCardDragStart = (id: string) => {
+    gameCardDragSrcId.current = id;
+    setDraggingGameId(id);
   };
+
+  const handleGameCardDragOver = (e: React.DragEvent, slot: number) => {
+    if (!gameCardDragSrcId.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverGameSlot(slot);
+  };
+
+  const handleGameCardDrop = (e: React.DragEvent, targetSlot: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const srcId = gameCardDragSrcId.current;
+    gameCardDragSrcId.current = null;
+    setDraggingGameId(null);
+    setDragOverGameSlot(null);
+    if (!srcId) return;
+    setGameCardImages((prev) => {
+      const srcImg = prev.find((i) => i.id === srcId);
+      if (!srcImg || srcImg.slot === targetSlot) return prev;
+      return prev.map((img) => {
+        if (img.id === srcId) return { ...img, slot: targetSlot };
+        if (img.slot === targetSlot) return { ...img, slot: srcImg.slot };
+        return img;
+      }).sort((a, b) => a.slot - b.slot);
+    });
+    setGameCardsDirty(true);
+  };
+
+  const handleGameCardDragEnd = () => {
+    gameCardDragSrcId.current = null;
+    setDraggingGameId(null);
+    setDragOverGameSlot(null);
+  };
+
+  // ── Game card replace ─────────────────────────────────────────────────────
+  const handleGameReplaceClick = (imgId: string) => {
+    setGameReplaceTargetId(imgId);
+    gameReplaceFileInputRef.current?.click();
+  };
+
+  const handleGameReplaceFileInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !gameReplaceTargetId) return;
+    const targetImg = gameCardImages.find((i) => i.id === gameReplaceTargetId);
+    if (!targetImg) return;
+    setGameReuploading(true);
+    setGameCardError(null);
+    try {
+      await deleteGameCardImage(targetImg.storagePath);
+      const newImg = await uploadGameCardImage(file, targetImg.slot, setGameReuploadProgress);
+      const url = await getGameCardImageURL(newImg.storagePath);
+      setGameCardImages((prev) =>
+        prev.map((i) => i.id === gameReplaceTargetId ? { ...newImg, slot: i.slot } : i)
+      );
+      setGameCardPreviewURLs((prev) => {
+        const next = { ...prev };
+        delete next[gameReplaceTargetId];
+        next[newImg.id] = url;
+        return next;
+      });
+      setGameCardsDirty(true);
+    } catch (err) {
+      console.error("Game replace failed:", err);
+      setGameCardError("Failed to replace image. Please try again.");
+    } finally {
+      setGameReuploading(false);
+      setGameReuploadProgress(0);
+      setGameReplaceTargetId(null);
+    }
+  }, [gameReplaceTargetId, gameCardImages]);
+
+  const handleSaveGameCards = useCallback(async () => {
+    setSavingGame(true);
+    setGameCardError(null);
+    try {
+      await saveGameCardImages(gameCardImages);
+      setGameCardsDirty(false);
+      alert("Game pictures saved!");
+    } catch (err) {
+      console.error("Save failed:", err);
+      setGameCardError("Failed to save. Please try again.");
+    } finally {
+      setSavingGame(false);
+    }
+  }, [gameCardImages]);
 
   const handleGameButtonClick = () => {
     gameFileInputRef.current?.click();
   };
 
   const handleGameDrag = (e: React.DragEvent) => {
+    if (gameCardDragSrcId.current) return; // card reorder in progress — ignore
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
@@ -85,337 +429,559 @@ export default function AppDetails() {
     }
   };
 
-  const handleGameDrop = (e: React.DragEvent) => {
+  const handleGameDrop = (e: React.DragEvent, slot?: number) => {
+    if (gameCardDragSrcId.current) {
+      // card reorder onto an empty slot — move the card there
+      if (slot !== undefined) handleGameCardDrop(e, slot);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     setGameDragActive(false);
-
-    if (gameImages.length >= 5) {
-      alert("Maximum 5 game images allowed");
-      return;
-    }
-
     const files = Array.from(e.dataTransfer.files);
     handleGameFiles(files);
   };
 
   const handleGameFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      if (gameImages.length >= 5) {
-        alert("Maximum 5 game images allowed");
-        return;
-      }
       const files = Array.from(e.target.files);
       handleGameFiles(files);
     }
   };
 
-  const handleGameFiles = (files: File[]) => {
-    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-    const remainingSlots = 5 - gameImages.length;
-    const filesToAdd = imageFiles.slice(0, remainingSlots);
+  const handleGameFiles = useCallback(async (files: File[]) => {
+    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+    if (!imageFiles.length) return;
 
-    filesToAdd.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const newImage = {
-          id: Math.random().toString(36).substr(2, 9),
-          url: e.target?.result as string,
-          file: file,
-        };
-        setGameImages((prev) => {
-          if (prev.length < 5) {
-            return [...prev, newImage];
-          }
-          return prev;
-        });
-      };
-      reader.readAsDataURL(file);
-    });
+    const occupiedSlots = new Set(gameCardImages.map((img) => img.slot));
+    const emptySlots = [1, 2, 3, 4, 5].filter((s) => !occupiedSlots.has(s));
+    const filesToAdd = imageFiles.slice(0, emptySlots.length);
 
-    if (imageFiles.length > remainingSlots) {
-      alert(`Only ${remainingSlots} more image(s) can be added`);
+    if (!filesToAdd.length) {
+      alert("All 5 game card slots are full");
+      return;
     }
-  };
+    if (imageFiles.length > emptySlots.length) {
+      alert(`Only ${emptySlots.length} slot(s) available`);
+    }
+
+    setUploadingGame(true);
+    setGameCardError(null);
+    try {
+      const newImages: GameCardImage[] = [];
+      const newURLs: Record<string, string> = {};
+      for (let i = 0; i < filesToAdd.length; i++) {
+        const slot = emptySlots[i];
+        const img = await uploadGameCardImage(filesToAdd[i], slot, setUploadGameProgress);
+        const url = await getGameCardImageURL(img.storagePath);
+        newImages.push(img);
+        newURLs[img.id] = url;
+      }
+      const updated = [...gameCardImages, ...newImages].sort((a, b) => a.slot - b.slot);
+      setGameCardImages(updated);
+      setGameCardPreviewURLs((prev) => ({ ...prev, ...newURLs }));
+      setGameCardsDirty(true);
+    } catch (err) {
+      console.error("Game card upload failed:", err);
+      setGameCardError("Upload failed. Please try again.");
+    } finally {
+      setUploadingGame(false);
+      setUploadGameProgress(0);
+    }
+  }, [gameCardImages]);
+
+  const noticeDirty =
+    !loadingNotice &&
+    (noticeHeading !== savedNoticeRef.current.heading ||
+      noticeText !== savedNoticeRef.current.text);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-          App Details
-        </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Manage your app details and carousel images
-        </p>
+    <div className="space-y-8">
+      {/* ── Page Header ──────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            App Details
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Manage notices, carousel slides, and game card images shown in the main app.
+          </p>
+        </div>
+        <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+          Live
+        </span>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 p-6 space-y-6">
-        {/* Notice Field */}
-        <div>
-          <label
-            htmlFor="notice"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
-            Notice
-          </label>
-          <textarea
-            id="notice"
-            rows={6}
-            value={notice}
-            onChange={(e) => setNotice(e.target.value)}
-            className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            placeholder="Enter your notice here..."
-          />
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Enter a large text notice for your app
-          </p>
-        </div>
-
-        {/* Exchange Rate Field */}
-        <div>
-          <label
-            htmlFor="exchangeRate"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
-            Exchange Rate
-          </label>
+      {/* ── Section 1: Notice ─────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+        {/* Section header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              1 INR =
-            </span>
-            <input
-              id="exchangeRate"
-              type="number"
-              step="0.01"
-              min="0"
-              value={exchangeRate}
-              onChange={(e) => setExchangeRate(e.target.value)}
-              className="flex-1 max-w-xs px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="0.00"
-            />
-            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              Brazilian Real
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Set the conversion rate from Indian Rupee to Brazilian Real
-          </p>
-        </div>
-
-        {/* Smile Coin Rate Field */}
-        <div>
-          <label
-            htmlFor="smileCoinRate"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >
-            Smile Coin Rate
-          </label>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              1 Brazilian Real =
-            </span>
-            <input
-              id="smileCoinRate"
-              type="number"
-              step="0.01"
-              min="0"
-              value={smileCoinRate}
-              onChange={(e) => setSmileCoinRate(e.target.value)}
-              className="flex-1 max-w-xs px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="0.00"
-            />
-            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
-              Smile Coin
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Set the conversion rate from Brazilian Real to Smile Coin
-          </p>
-        </div>
-
-        {/* Carousel Images Field */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Carousel Images
-          </label>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Recommended dimension: 1920 x 1080 pixels
-          </p>
-
-          {/* Drag and Drop Area */}
-          <div className="max-w-2xl mx-auto">
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-lg overflow-hidden transition-colors ${
-                dragActive
-                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/10"
-                  : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
-              }`}
-              style={{ aspectRatio: "16/9" }}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleFileInput}
-                className="hidden"
-              />
-
-              {carouselImages.length === 0 ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
-                  <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-full">
-                    <Upload className="w-6 h-6 text-gray-400" />
-                  </div>
-                  <div className="mt-3 text-center">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      <button
-                        type="button"
-                        onClick={handleButtonClick}
-                        className="text-blue-600 hover:text-blue-700 dark:text-blue-500 dark:hover:text-blue-400 font-medium"
-                      >
-                        Click to upload
-                      </button>{" "}
-                      or drag and drop
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                      PNG, JPG, GIF up to 10MB
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative w-full h-full">
-                  <img
-                    src={carouselImages[carouselImages.length - 1].url}
-                    alt="Carousel preview"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-3 right-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleButtonClick}
-                      className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-colors"
-                      aria-label="Add more images"
-                    >
-                      <Upload className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeImage(carouselImages[carouselImages.length - 1].id)}
-                      className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg shadow-lg transition-colors"
-                      aria-label="Remove image"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-3">
-                    <p className="text-sm text-white font-medium">
-                      {carouselImages.length} image{carouselImages.length !== 1 ? "s" : ""} uploaded
-                    </p>
-                    <p className="text-xs text-gray-300 mt-1 truncate">
-                      {carouselImages[carouselImages.length - 1].file.name}
-                    </p>
-                  </div>
-                </div>
-              )}
+            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+              <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Notice</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">In-app announcement shown to all users</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={handleSaveNotice}
+            disabled={savingNotice || loadingNotice || !noticeDirty}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {savingNotice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {savingNotice ? "Saving..." : "Save Notice"}
+          </button>
         </div>
 
-        {/* Game Pictures Field */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Game Pictures
-          </label>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Upload up to 5 images (1080 x 1920 pixels - Vertical)
-          </p>
+        {/* Section body */}
+        <div className="p-6 space-y-5">
+          {noticeError && (
+            <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
+              {noticeError}
+            </div>
+          )}
 
-          {/* Game Images Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {Array.from({ length: 5 }).map((_, index) => {
-              const image = gameImages[index];
-              return (
-                <div
-                  key={index}
-                  onDragEnter={!image ? handleGameDrag : undefined}
-                  onDragLeave={!image ? handleGameDrag : undefined}
-                  onDragOver={!image ? handleGameDrag : undefined}
-                  onDrop={!image ? handleGameDrop : undefined}
-                  className={`relative aspect-[9/16] rounded-lg overflow-hidden border-2 transition-colors ${
-                    !image
-                      ? gameDragActive && gameImages.length < 5
-                        ? "border-dashed border-blue-500 bg-blue-50 dark:bg-blue-900/10"
-                        : "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
-                      : "border-solid border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  {!image ? (
-                    <button
-                      type="button"
-                      onClick={handleGameButtonClick}
-                      disabled={gameImages.length >= 5}
-                      className="absolute inset-0 flex flex-col items-center justify-center p-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
-                        <Upload className="w-5 h-5 text-gray-400" />
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                        {index + 1}
-                      </p>
-                    </button>
-                  ) : (
-                    <div className="relative w-full h-full group">
-                      <img
-                        src={image.url}
-                        alt={`Game picture ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeGameImage(image.id)}
-                        className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                        aria-label="Remove image"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <p className="text-xs text-white truncate">
-                          {image.file.name}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+          <div className="grid gap-5 sm:grid-cols-2">
+            {/* Notice Heading */}
+            <div>
+              <label
+                htmlFor="noticeHeading"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+              >
+                Heading
+              </label>
+              {loadingNotice ? (
+                <div className="flex items-center gap-2 h-10 text-gray-400 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading…
                 </div>
-              );
-            })}
+              ) : (
+                <input
+                  id="noticeHeading"
+                  type="text"
+                  value={noticeHeading}
+                  onChange={(e) => setNoticeHeading(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter notice heading..."
+                />
+              )}
+              <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                Short title displayed at the top of the notice
+              </p>
+            </div>
+
+            {/* Spacer on mobile, nothing on sm+ */}
+            <div className="hidden sm:block" />
           </div>
 
+          {/* Notice Text */}
+          <div>
+            <label
+              htmlFor="noticeText"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+            >
+              Body Text
+            </label>
+            {loadingNotice ? (
+              <div className="flex items-center gap-2 h-20 text-gray-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading…
+              </div>
+            ) : (
+              <textarea
+                id="noticeText"
+                rows={5}
+                value={noticeText}
+                onChange={(e) => setNoticeText(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder="Enter notice body text here..."
+              />
+            )}
+            <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              Full notice message displayed in the app
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Section 2: Carousel Images ────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+        {/* Section header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+              <ImagePlay className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Carousel Images</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Recommended: 1920 × 1080 px &middot; Changes are live after saving
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:block text-xs text-gray-500 dark:text-gray-400">
+              {carouselImages.length} image{carouselImages.length !== 1 ? "s" : ""}
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveCarousel}
+              disabled={saving || uploading || loadingCarousel || !carouselDirty}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {saving ? "Saving..." : "Save Carousel"}
+            </button>
+          </div>
+        </div>
+
+        {/* Section body */}
+        <div className="p-6 space-y-5">
+          {carouselError && (
+            <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
+              {carouselError}
+            </div>
+          )}
+
+          {/* Hidden input for replacing an existing image */}
           <input
-            ref={gameFileInputRef}
+            ref={replaceFileInputRef}
             type="file"
-            multiple
             accept="image/*"
-            onChange={handleGameFileInput}
+            onChange={handleReplaceFileInput}
             className="hidden"
           />
 
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {gameImages.length} of 5 images uploaded
-          </p>
+          {/* Current images grid */}
+          {loadingCarousel ? (
+            <div className="flex items-center justify-center h-28 text-gray-400 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <span className="text-sm">Loading current images…</span>
+            </div>
+          ) : carouselImages.length > 0 ? (
+            <>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
+                Drag cards to reorder &middot; Hover a card to replace or remove it
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                {carouselImages.map((img) => {
+                  const isBeingReplaced = reuploading && replaceTargetId === img.id;
+                  const isDragging = draggingId === img.id;
+                  const isDropTarget = dragOverId === img.id && draggingId !== img.id;
+                  return (
+                    <div
+                      key={img.id}
+                      draggable
+                      onDragStart={() => handleCardDragStart(img.id)}
+                      onDragOver={(e) => handleCardDragOver(e, img.id)}
+                      onDrop={(e) => handleCardDrop(e, img.id)}
+                      onDragEnd={handleCardDragEnd}
+                      className={`relative group aspect-video rounded-lg overflow-hidden border-2 bg-gray-100 dark:bg-gray-800 transition-all select-none ${
+                        isDragging
+                          ? "opacity-40 scale-95 border-blue-400 dark:border-blue-500"
+                          : isDropTarget
+                          ? "border-blue-500 ring-2 ring-blue-400 scale-[1.02]"
+                          : "border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
+                      {isBeingReplaced ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60">
+                          <Loader2 className="w-5 h-5 text-white animate-spin" />
+                          <span className="text-xs text-white">{reuploadProgress}%</span>
+                        </div>
+                      ) : null}
+
+                      {carouselPreviewURLs[img.id] ? (
+                        <img
+                          src={carouselPreviewURLs[img.id]}
+                          alt={img.fileName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        </div>
+                      )}
+
+                      {/* Drag handle */}
+                      <div className="absolute top-1.5 left-1.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing">
+                        <div className="p-1 rounded bg-black/50 backdrop-blur-sm">
+                          <GripVertical className="w-3 h-3 text-white" />
+                        </div>
+                      </div>
+
+                      {/* Replace + Delete buttons */}
+                      <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => handleReplaceClick(img.id)}
+                          disabled={reuploading}
+                          className="p-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded shadow-lg"
+                          aria-label="Replace image"
+                          title="Replace image"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeImage(img)}
+                          disabled={reuploading}
+                          className="p-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded shadow-lg"
+                          aria-label="Remove image"
+                          title="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Filename bar */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <p className="text-xs text-white truncate">{img.fileName}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400 italic">No carousel images uploaded yet.</p>
+          )}
+
+          {/* Drop zone — compact strip */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+          <div
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            className={`flex items-center gap-4 px-5 py-4 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+              dragActive
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/10"
+                : "border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10"
+            }`}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="w-5 h-5 text-blue-500 animate-spin shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Uploading… {uploadProgress}%</p>
+                  <div className="mt-1.5 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-2 bg-white dark:bg-gray-700 rounded-lg shadow-sm shrink-0">
+                  <Upload className="w-5 h-5 text-gray-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <span className="text-blue-600 dark:text-blue-400">Click to upload</span>
+                    {" "}or drag &amp; drop
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">PNG, JPG, GIF up to 10 MB</p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Section 3: Game Pictures ──────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+        {/* Section header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+              <Gamepad2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Game Pictures</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Up to 5 vertical images (1080 × 1920 px) &middot; One per game card slot
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full ${
+                  gameCardImages.length === 5 ? "bg-green-500" : "bg-amber-400"
+                }`}
+              />
+              {gameCardImages.length} / 5 filled
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveGameCards}
+              disabled={savingGame || uploadingGame || loadingGameCards || !gameCardsDirty}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {savingGame ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {savingGame ? "Saving..." : "Save Game Pictures"}
+            </button>
+          </div>
         </div>
 
-        {/* Save Button */}
-        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-800">
-          <button
-            type="button"
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
-          >
-            Save Changes
-          </button>
+        {/* Section body */}
+        <div className="p-6 space-y-5">
+          {gameCardError && (
+            <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
+              {gameCardError}
+            </div>
+          )}
+
+          {/* Hidden inputs */}
+          <input ref={gameFileInputRef} type="file" multiple accept="image/*" onChange={handleGameFileInput} className="hidden" />
+          <input ref={gameReplaceFileInputRef} type="file" accept="image/*" onChange={handleGameReplaceFileInput} className="hidden" />
+
+          {loadingGameCards ? (
+            <div className="flex items-center justify-center h-28 text-gray-400 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <span className="text-sm">Loading game card images…</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
+                Drag cards to reorder &middot; Hover a card to replace it &middot; Click an empty slot to upload
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {Array.from({ length: 5 }).map((_, index) => {
+                  const slot = index + 1;
+                  const image = gameCardImages.find((img) => img.slot === slot);
+                  const previewURL = image ? gameCardPreviewURLs[image.id] : undefined;
+                  const isBeingReplaced = gameReuploading && gameReplaceTargetId === image?.id;
+                  const isDragging = image && draggingGameId === image.id;
+                  const isDropTarget = dragOverGameSlot === slot && (!image || draggingGameId !== image.id);
+                  return (
+                    <div
+                      key={slot}
+                      draggable={!!image}
+                      onDragStart={image ? () => handleGameCardDragStart(image.id) : undefined}
+                      onDragOver={(e) => image ? handleGameCardDragOver(e, slot) : handleGameDrag(e)}
+                      onDragEnter={!image ? handleGameDrag : (e) => handleGameCardDragOver(e, slot)}
+                      onDragLeave={!image ? handleGameDrag : undefined}
+                      onDrop={(e) => image ? handleGameCardDrop(e, slot) : handleGameDrop(e, slot)}
+                      onDragEnd={image ? handleGameCardDragEnd : undefined}
+                      className={`relative aspect-[9/16] rounded-xl overflow-hidden border-2 transition-all select-none ${
+                        isDragging
+                          ? "opacity-40 scale-95 border-blue-400 dark:border-blue-500"
+                          : isDropTarget
+                          ? "border-blue-500 ring-2 ring-blue-400 scale-[1.02]"
+                          : !image
+                          ? gameDragActive && gameCardImages.length < 5
+                            ? "border-dashed border-blue-500 bg-blue-50 dark:bg-blue-900/10"
+                            : "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                          : "border-solid border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
+                      {/* Slot badge */}
+                      <span className="absolute top-2 left-2 z-10 text-[10px] font-bold bg-black/60 backdrop-blur-sm text-white rounded-md px-1.5 py-0.5">
+                        #{slot}
+                      </span>
+
+                      {!image ? (
+                        <button
+                          type="button"
+                          onClick={handleGameButtonClick}
+                          disabled={uploadingGame || gameCardImages.length >= 5}
+                          className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {uploadingGame ? (
+                            <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                          ) : (
+                            <>
+                              <div className="p-2.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+                                <Upload className="w-5 h-5 text-gray-400" />
+                              </div>
+                              <span className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
+                                Card {slot}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="relative w-full h-full group">
+                          {/* Replace overlay */}
+                          {isBeingReplaced && (
+                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 bg-black/60">
+                              <Loader2 className="w-5 h-5 text-white animate-spin" />
+                              <span className="text-xs text-white">{gameReuploadProgress}%</span>
+                            </div>
+                          )}
+
+                          {previewURL ? (
+                            <img
+                              src={previewURL}
+                              alt={`Game card ${slot}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+                              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                            </div>
+                          )}
+
+                          {/* Drag handle */}
+                          <div className="absolute top-1.5 left-[calc(50%-10px)] opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10">
+                            <div className="p-1 rounded bg-black/50 backdrop-blur-sm">
+                              <GripVertical className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
+
+                          {/* Replace button */}
+                          <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <button
+                              type="button"
+                              onClick={() => handleGameReplaceClick(image.id)}
+                              disabled={gameReuploading}
+                              className="p-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded shadow-lg"
+                              aria-label="Replace image"
+                              title="Replace image"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Filename bar */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p className="text-xs text-white truncate">{image.fileName}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Upload / replace progress */}
+          {(uploadingGame || gameReuploading) && (
+            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 rounded-lg">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500 shrink-0" />
+              <span>{gameReuploading ? "Replacing" : "Uploading"}… {gameReuploading ? gameReuploadProgress : uploadGameProgress}%</span>
+              <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500 transition-all"
+                  style={{ width: `${gameReuploading ? gameReuploadProgress : uploadGameProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
