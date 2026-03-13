@@ -29,16 +29,14 @@ export default function AppDetails() {
   const [loadingCarousel, setLoadingCarousel] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [saving, setSaving] = useState(false);
   const [carouselError, setCarouselError] = useState<string | null>(null);
 
   // Game card images — Firebase backed
   const [gameCardImages, setGameCardImages] = useState<GameCardImage[]>([]);
   const [gameCardPreviewURLs, setGameCardPreviewURLs] = useState<Record<string, string>>({});
   const [loadingGameCards, setLoadingGameCards] = useState(true);
-  const [uploadingGame, setUploadingGame] = useState(false);
+  const [uploadingGameSlot, setUploadingGameSlot] = useState<number | null>(null);
   const [uploadGameProgress, setUploadGameProgress] = useState(0);
-  const [savingGame, setSavingGame] = useState(false);
   const [gameCardError, setGameCardError] = useState<string | null>(null);
 
   const [dragActive, setDragActive] = useState(false);
@@ -48,9 +46,6 @@ export default function AppDetails() {
 
   // Dirty tracking
   const savedNoticeRef = useRef({ heading: "", text: "" });
-  const [carouselDirty, setCarouselDirty] = useState(false);
-  const [gameCardsDirty, setGameCardsDirty] = useState(false);
-
   // Carousel reorder
   const cardDragSrcId = useRef<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -69,7 +64,8 @@ export default function AppDetails() {
 
   // Game card replace
   const gameReplaceFileInputRef = useRef<HTMLInputElement>(null);
-  const [gameReplaceTargetId, setGameReplaceTargetId] = useState<string | null>(null);
+  const gameReplaceTargetIdRef = useRef<string | null>(null);      // read in callback (avoids stale closure)
+  const [gameReplaceTargetId, setGameReplaceTargetId] = useState<string | null>(null); // drives UI indicator only
   const [gameReuploading, setGameReuploading] = useState(false);
   const [gameReuploadProgress, setGameReuploadProgress] = useState(0);
 
@@ -117,13 +113,23 @@ export default function AppDetails() {
         const images = await fetchGameCardImages();
         setGameCardImages(images);
         const urlMap: Record<string, string> = {};
-        await Promise.all(
+        const results = await Promise.allSettled(
           images.map(async (img) => {
-            urlMap[img.id] = await getGameCardImageURL(img.storagePath);
+            const url = await getGameCardImageURL(img.storagePath);
+            urlMap[img.id] = url;
           })
         );
+        const anyFailed = results.some((r) => r.status === "rejected");
+        if (anyFailed) {
+          console.warn(
+            "Some game card image URLs failed to load:",
+            results
+              .map((r, i) => (r.status === "rejected" ? images[i].storagePath : null))
+              .filter(Boolean)
+          );
+          setGameCardError("Some images could not be loaded — their files may have been deleted from Storage.");
+        }
         setGameCardPreviewURLs(urlMap);
-        setGameCardsDirty(false);
       } catch (err) {
         console.error("Failed to load game cards:", err);
         setGameCardError("Failed to load game card images");
@@ -150,7 +156,6 @@ export default function AppDetails() {
           })
         );
         setCarouselPreviewURLs(urlMap);
-        setCarouselDirty(false);
       } catch (err) {
         console.error("Failed to load carousel:", err);
         setCarouselError("Failed to load carousel images");
@@ -161,64 +166,74 @@ export default function AppDetails() {
     load();
   }, []);
 
+  // ── Warn on reload/navigation while any upload is in progress ─────────────
+  const isUploading = uploading || reuploading || uploadingGameSlot !== null || gameReuploading;
+  useEffect(() => {
+    if (!isUploading) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isUploading]);
+
   // ── Upload new images to Firebase Storage ─────────────────────────────────
   const handleFiles = useCallback(async (files: File[]) => {
     const imageFiles = files.filter((f) => f.type.startsWith("image/"));
     if (!imageFiles.length) return;
     setUploading(true);
     setCarouselError(null);
+    const uploadedSoFar: CarouselImage[] = [];
     try {
+      const newImages: CarouselImage[] = [];
+      const newURLs: Record<string, string> = {};
       for (const file of imageFiles) {
         const img = await uploadCarouselImage(file, setUploadProgress);
+        uploadedSoFar.push(img); // track for cleanup on failure
         const url = await getCarouselImageURL(img.storagePath);
-        setCarouselImages((prev) => {
-          const updated = [...prev, { ...img, order: prev.length }];
-          return updated;
-        });
-        setCarouselPreviewURLs((prev) => ({ ...prev, [img.id]: url }));
-        setCarouselDirty(true);
+        newImages.push(img);
+        newURLs[img.id] = url;
       }
+      const updated = [...carouselImages, ...newImages].map((img, idx) => ({ ...img, order: idx }));
+      await saveCarouselImages(updated);
+      setCarouselImages(updated);
+      setCarouselPreviewURLs((prev) => ({ ...prev, ...newURLs }));
     } catch (err) {
       console.error("Upload failed:", err);
       setCarouselError("Upload failed. Please try again.");
+      // Remove any files that made it to Storage so they don't become orphans
+      uploadedSoFar.forEach((img) =>
+        deleteCarouselImage(img.storagePath).catch((e) =>
+          console.warn("Storage cleanup after failed upload:", e)
+        )
+      );
     } finally {
       setUploading(false);
       setUploadProgress(0);
     }
-  }, []);
+  }, [carouselImages]);
 
   // ── Delete a carousel image ───────────────────────────────────────────────
   const removeImage = useCallback(async (img: CarouselImage) => {
     try {
-      await deleteCarouselImage(img.storagePath);
-      setCarouselImages((prev) =>
-        prev.filter((i) => i.id !== img.id).map((i, idx) => ({ ...i, order: idx }))
+      const updatedImages = carouselImages
+        .filter((i) => i.id !== img.id)
+        .map((i, idx) => ({ ...i, order: idx }));
+      await saveCarouselImages(updatedImages);
+      // Delete from storage after Firestore is updated — best-effort cleanup
+      deleteCarouselImage(img.storagePath).catch((err) =>
+        console.warn("Old carousel image cleanup failed:", err)
       );
+      setCarouselImages(updatedImages);
       setCarouselPreviewURLs((prev) => {
         const next = { ...prev };
         delete next[img.id];
         return next;
       });
-      setCarouselDirty(true);
     } catch (err) {
       console.error("Delete failed:", err);
       setCarouselError("Failed to delete image.");
-    }
-  }, []);
-
-  // ── Save carousel order to Firestore ─────────────────────────────────────
-  const handleSaveCarousel = useCallback(async () => {
-    setSaving(true);
-    setCarouselError(null);
-    try {
-      await saveCarouselImages(carouselImages);
-      setCarouselDirty(false);
-      alert("Carousel saved!");
-    } catch (err) {
-      console.error("Save failed:", err);
-      setCarouselError("Failed to save. Please try again.");
-    } finally {
-      setSaving(false);
     }
   }, [carouselImages]);
 
@@ -266,15 +281,17 @@ export default function AppDetails() {
     setDraggingId(null);
     setDragOverId(null);
     if (!srcId || srcId === targetId) return;
-    setCarouselDirty(true);
-    setCarouselImages((prev) => {
-      const next = [...prev];
-      const srcIdx = next.findIndex((i) => i.id === srcId);
-      const tgtIdx = next.findIndex((i) => i.id === targetId);
-      if (srcIdx < 0 || tgtIdx < 0) return prev;
-      const [moved] = next.splice(srcIdx, 1);
-      next.splice(tgtIdx, 0, moved);
-      return next.map((img, idx) => ({ ...img, order: idx }));
+    const next = [...carouselImages];
+    const srcIdx = next.findIndex((i) => i.id === srcId);
+    const tgtIdx = next.findIndex((i) => i.id === targetId);
+    if (srcIdx < 0 || tgtIdx < 0) return;
+    const [moved] = next.splice(srcIdx, 1);
+    next.splice(tgtIdx, 0, moved);
+    const updatedImages = next.map((img, idx) => ({ ...img, order: idx }));
+    setCarouselImages(updatedImages);
+    saveCarouselImages(updatedImages).catch((err) => {
+      console.error("Auto-save reorder failed:", err);
+      setCarouselError("Failed to save reorder. Please try again.");
     });
   };
 
@@ -298,23 +315,34 @@ export default function AppDetails() {
     if (!targetImg) return;
     setReuploading(true);
     setCarouselError(null);
+    let newImg: CarouselImage | null = null;
     try {
-      await deleteCarouselImage(targetImg.storagePath);
-      const newImg = await uploadCarouselImage(file, setReuploadProgress);
+      newImg = await uploadCarouselImage(file, setReuploadProgress);
       const url = await getCarouselImageURL(newImg.storagePath);
-      setCarouselImages((prev) =>
-        prev.map((i) => i.id === replaceTargetId ? { ...newImg, order: i.order } : i)
+      const updatedImages = carouselImages.map((i) =>
+        i.id === replaceTargetId ? { ...newImg!, order: i.order } : i
       );
+      await saveCarouselImages(updatedImages);
+      // Delete old image after Firestore is updated — best-effort cleanup
+      deleteCarouselImage(targetImg.storagePath).catch((err) =>
+        console.warn("Old carousel image cleanup failed:", err)
+      );
+      setCarouselImages(updatedImages);
       setCarouselPreviewURLs((prev) => {
         const next = { ...prev };
         delete next[replaceTargetId];
-        next[newImg.id] = url;
+        next[newImg!.id] = url;
         return next;
       });
-      setCarouselDirty(true);
     } catch (err) {
       console.error("Replace failed:", err);
       setCarouselError("Failed to replace image. Please try again.");
+      // If the new file reached Storage but save failed, remove it so it doesn't orphan
+      if (newImg) {
+        deleteCarouselImage(newImg.storagePath).catch((e) =>
+          console.warn("Storage cleanup after failed replace:", e)
+        );
+      }
     } finally {
       setReuploading(false);
       setReuploadProgress(0);
@@ -343,16 +371,18 @@ export default function AppDetails() {
     setDraggingGameId(null);
     setDragOverGameSlot(null);
     if (!srcId) return;
-    setGameCardImages((prev) => {
-      const srcImg = prev.find((i) => i.id === srcId);
-      if (!srcImg || srcImg.slot === targetSlot) return prev;
-      return prev.map((img) => {
-        if (img.id === srcId) return { ...img, slot: targetSlot };
-        if (img.slot === targetSlot) return { ...img, slot: srcImg.slot };
-        return img;
-      }).sort((a, b) => a.slot - b.slot);
+    const srcImg = gameCardImages.find((i) => i.id === srcId);
+    if (!srcImg || srcImg.slot === targetSlot) return;
+    const updatedImages = gameCardImages.map((img) => {
+      if (img.id === srcId) return { ...img, slot: targetSlot };
+      if (img.slot === targetSlot) return { ...img, slot: srcImg.slot };
+      return img;
+    }).sort((a, b) => a.slot - b.slot);
+    setGameCardImages(updatedImages);
+    saveGameCardImages(updatedImages).catch((err) => {
+      console.error("Auto-save reorder failed:", err);
+      setGameCardError("Failed to save reorder. Please try again.");
     });
-    setGameCardsDirty(true);
   };
 
   const handleGameCardDragEnd = () => {
@@ -363,6 +393,7 @@ export default function AppDetails() {
 
   // ── Game card replace ─────────────────────────────────────────────────────
   const handleGameReplaceClick = (imgId: string) => {
+    gameReplaceTargetIdRef.current = imgId;
     setGameReplaceTargetId(imgId);
     gameReplaceFileInputRef.current?.click();
   };
@@ -370,47 +401,45 @@ export default function AppDetails() {
   const handleGameReplaceFileInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !gameReplaceTargetId) return;
-    const targetImg = gameCardImages.find((i) => i.id === gameReplaceTargetId);
+    const targetId = gameReplaceTargetIdRef.current;
+    if (!file || !targetId) return;
+    const targetImg = gameCardImages.find((i) => i.id === targetId);
     if (!targetImg) return;
     setGameReuploading(true);
     setGameCardError(null);
+    let newImg: GameCardImage | null = null;
     try {
-      await deleteGameCardImage(targetImg.storagePath);
-      const newImg = await uploadGameCardImage(file, targetImg.slot, setGameReuploadProgress);
+      newImg = await uploadGameCardImage(file, targetImg.slot, setGameReuploadProgress);
       const url = await getGameCardImageURL(newImg.storagePath);
-      setGameCardImages((prev) =>
-        prev.map((i) => i.id === gameReplaceTargetId ? { ...newImg, slot: i.slot } : i)
+      const updatedImages = gameCardImages.map((i) =>
+        i.id === targetId ? { ...newImg!, slot: i.slot } : i
       );
+      await saveGameCardImages(updatedImages);
+      // Delete old image after Firestore is updated — best-effort cleanup
+      deleteGameCardImage(targetImg.storagePath).catch((err) =>
+        console.warn("Old game card image cleanup failed:", err)
+      );
+      setGameCardImages(updatedImages);
       setGameCardPreviewURLs((prev) => {
         const next = { ...prev };
-        delete next[gameReplaceTargetId];
-        next[newImg.id] = url;
+        delete next[targetId];
+        next[newImg!.id] = url;
         return next;
       });
-      setGameCardsDirty(true);
     } catch (err) {
       console.error("Game replace failed:", err);
       setGameCardError("Failed to replace image. Please try again.");
+      // If the new file reached Storage but save failed, remove it so it doesn't orphan
+      if (newImg) {
+        deleteGameCardImage(newImg.storagePath).catch((e) =>
+          console.warn("Storage cleanup after failed replace:", e)
+        );
+      }
     } finally {
+      gameReplaceTargetIdRef.current = null;
       setGameReuploading(false);
       setGameReuploadProgress(0);
       setGameReplaceTargetId(null);
-    }
-  }, [gameReplaceTargetId, gameCardImages]);
-
-  const handleSaveGameCards = useCallback(async () => {
-    setSavingGame(true);
-    setGameCardError(null);
-    try {
-      await saveGameCardImages(gameCardImages);
-      setGameCardsDirty(false);
-      alert("Game pictures saved!");
-    } catch (err) {
-      console.error("Save failed:", err);
-      setGameCardError("Failed to save. Please try again.");
-    } finally {
-      setSavingGame(false);
     }
   }, [gameCardImages]);
 
@@ -465,27 +494,35 @@ export default function AppDetails() {
       alert(`Only ${emptySlots.length} slot(s) available`);
     }
 
-    setUploadingGame(true);
     setGameCardError(null);
+    const uploadedSoFar: GameCardImage[] = [];
     try {
       const newImages: GameCardImage[] = [];
       const newURLs: Record<string, string> = {};
       for (let i = 0; i < filesToAdd.length; i++) {
         const slot = emptySlots[i];
+        setUploadingGameSlot(slot);
         const img = await uploadGameCardImage(filesToAdd[i], slot, setUploadGameProgress);
+        uploadedSoFar.push(img); // track for cleanup on failure
         const url = await getGameCardImageURL(img.storagePath);
         newImages.push(img);
         newURLs[img.id] = url;
       }
       const updated = [...gameCardImages, ...newImages].sort((a, b) => a.slot - b.slot);
+      await saveGameCardImages(updated);
       setGameCardImages(updated);
       setGameCardPreviewURLs((prev) => ({ ...prev, ...newURLs }));
-      setGameCardsDirty(true);
     } catch (err) {
       console.error("Game card upload failed:", err);
       setGameCardError("Upload failed. Please try again.");
+      // Remove any files that made it to Storage so they don't become orphans
+      uploadedSoFar.forEach((img) =>
+        deleteGameCardImage(img.storagePath).catch((e) =>
+          console.warn("Storage cleanup after failed upload:", e)
+        )
+      );
     } finally {
-      setUploadingGame(false);
+      setUploadingGameSlot(null);
       setUploadGameProgress(0);
     }
   }, [gameCardImages]);
@@ -619,24 +656,13 @@ export default function AppDetails() {
             <div>
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Carousel Images</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Recommended: 1920 × 1080 px &middot; Changes are live after saving
+                Recommended: 1920 × 1080 px &middot; Changes are saved automatically
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-xs text-gray-500 dark:text-gray-400">
-              {carouselImages.length} image{carouselImages.length !== 1 ? "s" : ""}
-            </span>
-            <button
-              type="button"
-              onClick={handleSaveCarousel}
-              disabled={saving || uploading || loadingCarousel || !carouselDirty}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? "Saving..." : "Save Carousel"}
-            </button>
-          </div>
+          <span className="hidden sm:block text-xs text-gray-500 dark:text-gray-400">
+            {carouselImages.length} image{carouselImages.length !== 1 ? "s" : ""}
+          </span>
         </div>
 
         {/* Section body */}
@@ -815,25 +841,14 @@ export default function AppDetails() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-              <span
-                className={`inline-block w-1.5 h-1.5 rounded-full ${
-                  gameCardImages.length === 5 ? "bg-green-500" : "bg-amber-400"
-                }`}
-              />
-              {gameCardImages.length} / 5 filled
-            </span>
-            <button
-              type="button"
-              onClick={handleSaveGameCards}
-              disabled={savingGame || uploadingGame || loadingGameCards || !gameCardsDirty}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {savingGame ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {savingGame ? "Saving..." : "Save Game Pictures"}
-            </button>
-          </div>
+          <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full ${
+                gameCardImages.length === 5 ? "bg-green-500" : "bg-amber-400"
+              }`}
+            />
+            {gameCardImages.length} / 5 filled
+          </span>
         </div>
 
         {/* Section body */}
@@ -897,10 +912,10 @@ export default function AppDetails() {
                         <button
                           type="button"
                           onClick={handleGameButtonClick}
-                          disabled={uploadingGame || gameCardImages.length >= 5}
+                          disabled={uploadingGameSlot !== null || gameCardImages.length >= 5}
                           className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {uploadingGame ? (
+                          {uploadingGameSlot === slot ? (
                             <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
                           ) : (
                             <>
@@ -970,10 +985,10 @@ export default function AppDetails() {
           )}
 
           {/* Upload / replace progress */}
-          {(uploadingGame || gameReuploading) && (
+          {(uploadingGameSlot !== null || gameReuploading) && (
             <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 rounded-lg">
               <Loader2 className="w-4 h-4 animate-spin text-blue-500 shrink-0" />
-              <span>{gameReuploading ? "Replacing" : "Uploading"}… {gameReuploading ? gameReuploadProgress : uploadGameProgress}%</span>
+              <span>{gameReuploading ? "Replacing" : `Uploading slot #${uploadingGameSlot}`}… {gameReuploading ? gameReuploadProgress : uploadGameProgress}%</span>
               <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-500 transition-all"
