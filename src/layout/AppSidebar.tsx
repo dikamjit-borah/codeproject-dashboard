@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
-import { Smile } from "lucide-react";
+import { Smile, LogOut } from "lucide-react";
 
 import {
   BoxCubeIcon,
@@ -14,6 +14,7 @@ import {
   DocsIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
+import { useAuth } from "../context/AuthContext";
 
 type NavItem = {
   name: string;
@@ -91,6 +92,7 @@ const othersItems: NavItem[] = [
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { logout } = useAuth();
   const location = useLocation();
 
   const [openSubmenu, setOpenSubmenu] = useState<{
@@ -328,7 +330,7 @@ const AppSidebar: React.FC = () => {
           )}
         </Link>
       </div>
-      <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
+      <div className="flex flex-col flex-1 overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
             <div>
@@ -349,6 +351,24 @@ const AppSidebar: React.FC = () => {
             </div>
           </div>
         </nav>
+      </div>
+      
+      <div className="pb-6 mt-auto border-t border-gray-200 dark:border-gray-800 pt-4">
+        <button
+          onClick={logout}
+          className={`menu-item group menu-item-inactive w-full ${
+            !isExpanded && !isHovered
+              ? "lg:justify-center"
+              : "lg:justify-start"
+          }`}
+        >
+          <span className="menu-item-icon-size menu-item-icon-inactive">
+            <LogOut className="w-5 h-5" />
+          </span>
+          {(isExpanded || isHovered || isMobileOpen) && (
+            <span className="menu-item-text">Sign Out</span>
+          )}
+        </button>
       </div>
     </aside>
   );

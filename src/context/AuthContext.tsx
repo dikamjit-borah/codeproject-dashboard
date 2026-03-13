@@ -3,6 +3,7 @@ import backend from "../api/adapters/backendAPI";
 
 export type AuthContextType = {
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
 };
@@ -11,10 +12,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const stored = localStorage.getItem("auth:isAuthenticated");
     setIsAuthenticated(stored === "true");
+    setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -37,12 +40,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setIsAuthenticated(false);
     localStorage.removeItem("auth:isAuthenticated");
+    localStorage.removeItem("auth:token");
     if (typeof window !== "undefined") {
       window.location.replace("/login");
     }
   };
 
-  const value = useMemo(() => ({ isAuthenticated, login, logout }), [isAuthenticated]);
+  const value = useMemo(() => ({ isAuthenticated, isLoading, login, logout }), [isAuthenticated, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
