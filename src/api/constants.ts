@@ -3,10 +3,8 @@
 // Vite exposes env vars on import.meta.env and requires the `VITE_` prefix for client-side code.
 export const CODEPROJEKT_DASHBOARD_BACKEND = {
   BASE_URL:
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((import.meta as any)?.env
-      ?.VITE_CODEPROJEKT_DASHBOARD_BACKEND_BASE_URL as string) ||
-    "https://codeprojekt-dashboard-backend.onrender.com",
+    import.meta.env.VITE_CODEPROJEKT_DASHBOARD_BACKEND_BASE_URL ||
+    "https://codeprojekt-dashboard-backend-h690.onrender.com",
   TIMEOUT: 15000, // ms
   DEFAULT_HEADERS: {
     "Content-Type": "application/json",
